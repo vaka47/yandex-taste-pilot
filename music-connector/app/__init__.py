@@ -1,0 +1,2 @@
+"""Taste music connector."""
+

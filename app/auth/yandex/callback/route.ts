@@ -1,0 +1,64 @@
+import { NextRequest, NextResponse } from "next/server";
+import { appUrl } from "@/lib/server/config";
+import { decryptSecret, hashToken } from "@/lib/server/crypto";
+import { createSession } from "@/lib/server/session";
+import { exchangeYandexCode, fetchYandexProfile, upsertYandexUser } from "@/lib/server/yandex-id";
+import { db, ensureSchema } from "@/lib/server/db";
+import { toggleFollow } from "@/lib/server/repository";
+import { recordAnalytics } from "@/lib/server/analytics";
+import { audit } from "@/lib/server/audit";
+
+type OAuthState = { state: string; verifier: string; returnTo: string; follow?: string | null; invite?: string | null; createdAt: number };
+
+export async function GET(request: NextRequest) {
+  const cookieValue = request.cookies.get("taste_oauth")?.value;
+  const code = request.nextUrl.searchParams.get("code");
+  const state = request.nextUrl.searchParams.get("state");
+  let target = "/following";
+  try {
+    if (!cookieValue || !code || !state) throw new Error("OAUTH_RESPONSE_INCOMPLETE");
+    const saved = JSON.parse(decryptSecret(cookieValue)) as OAuthState;
+    target = saved.returnTo.startsWith("/") && !saved.returnTo.startsWith("//") ? saved.returnTo : "/following";
+    if (saved.state !== state || Date.now() - saved.createdAt > 600_000) throw new Error("OAUTH_STATE_INVALID");
+    const accessToken = await exchangeYandexCode(code, saved.verifier);
+    const yandexProfile = await fetchYandexProfile(accessToken);
+    const user = await upsertYandexUser(yandexProfile);
+
+    if (saved.invite) {
+      await ensureSchema();
+      const claimed = await db().begin(async sql => {
+        const invites = await sql`
+          select id, tastemaker_id from creator_invites
+          where token_hash = ${hashToken(saved.invite!)} and used_at is null and expires_at > now()
+          for update
+        `;
+        if (!invites[0]) throw new Error("INVITE_INVALID");
+        await sql`update creator_invites set used_at = now() where id = ${invites[0].id}`;
+        await sql`update tastemakers set owner_user_id = ${user.id}, status = case when status = 'invited' then 'draft' else status end, updated_at = now() where id = ${invites[0].tastemaker_id}`;
+        await sql`update users set role = case when role = 'admin' then 'admin' else 'creator' end where id = ${user.id}`;
+        return invites[0].tastemaker_id as string;
+      });
+      await audit(user.id, "creator_invite_claimed", "tastemaker", claimed);
+      target = "/creator";
+    }
+
+    if (saved.follow) {
+      await toggleFollow(user.id, saved.follow, true, "oauth_continuation");
+      await recordAnalytics({ eventName: "follow_completed", tastemakerId: saved.follow, properties: { continuation: true } });
+      const separator = target.includes("?") ? "&" : "?";
+      target = `${target}${separator}follow=completed`;
+    }
+    await recordAnalytics({ eventName: "auth_completed", user: { id: user.id, role: user.role as "user" | "creator" | "admin", displayName: user.displayName, avatarUrl: null, yandexId: user.yandexId }, tastemakerId: saved.follow || null });
+    await createSession(user.id);
+    const response = NextResponse.redirect(new URL(target, appUrl()));
+    response.cookies.delete("taste_oauth");
+    return response;
+  } catch (error) {
+    const url = new URL(target, appUrl());
+    url.searchParams.set("auth", error instanceof Error ? error.message.toLowerCase() : "failed");
+    const response = NextResponse.redirect(url);
+    response.cookies.delete("taste_oauth");
+    return response;
+  }
+}
+
