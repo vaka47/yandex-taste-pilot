@@ -6,11 +6,14 @@ import { fixtureAdminTastemakers, fixtureAnalytics } from "@/lib/fixtures";
 import { fullNumber, percent, relativeTime } from "@/lib/format";
 
 type Notice = { tone: "success" | "warning"; text: string } | null;
+type NewTastemaker = { name: string; slug: string; roleLine: string };
 
 export function AdminDashboardClient({ preview }: { preview: boolean }) {
   const [notice, setNotice] = useState<Notice>(preview ? { tone: "warning", text: "Preview использует тестовые данные. Все production-действия защищены серверной ролью admin." } : null);
   const [busy, setBusy] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [draftMaker, setDraftMaker] = useState<NewTastemaker>({ name: "", slug: "", roleLine: "" });
   const [tastemakers, setTastemakers] = useState(fixtureAdminTastemakers);
   const metrics = fixtureAnalytics;
   const funnel = useMemo(() => [
@@ -20,22 +23,32 @@ export function AdminDashboardClient({ preview }: { preview: boolean }) {
     { label: "Подписались", value: metrics.follows7d, width: metrics.follows7d / metrics.uniqueVisitors7d * 100 }
   ], [metrics]);
 
-  async function action(type: string, tastemakerId?: string) {
+  async function action(type: string, tastemakerId?: string, payload: Partial<NewTastemaker> = {}) {
     if (preview) {
       setNotice({ tone: "warning", text: "В preview действие показано без записи. Подключите DATABASE_URL и войдите администратором, чтобы выполнить его." });
       if (type === "pause" && tastemakerId) setTastemakers(items => items.map(item => item.id === tastemakerId ? { ...item, status: item.status === "paused" ? "active" : "paused" } : item));
+      if (type === "create_tastemaker") setInviteOpen(false);
       return;
     }
     setBusy(`${type}:${tastemakerId || "global"}`);
-    const response = await fetch("/api/admin/action", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ type, tastemakerId }) });
+    const response = await fetch("/api/admin/action", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ type, tastemakerId, ...payload }) });
+    const result = await response.json().catch(() => ({})) as { inviteUrl?: string };
     setBusy(null);
-    setNotice(response.ok ? { tone: "success", text: "Действие выполнено и записано в audit log." } : { tone: "warning", text: "Действие не выполнено. Проверьте роль и состояние подключения." });
+    if (response.ok && type === "create_tastemaker" && result.inviteUrl) {
+      setInviteLink(result.inviteUrl);
+      setInviteOpen(false);
+      setDraftMaker({ name: "", slug: "", roleLine: "" });
+      await navigator.clipboard?.writeText(result.inviteUrl).catch(() => undefined);
+      setNotice({ tone: "success", text: "Тейстмейкер создан. Инвайт скопирован в буфер обмена." });
+      return;
+    }
+    setNotice(response.ok ? { tone: "success", text: "Действие выполнено и записано в audit log." } : { tone: "warning", text: "Действие не выполнено. Проверьте поля, роль и состояние подключения." });
   }
 
   return (
     <>
       <header className="workspaceTopbar"><div><span>операционный центр / 7 дней</span><h1>Пилот под контролем</h1></div><div>{preview ? <button type="button" className="ghostButton" onClick={() => setNotice({ tone: "warning", text: "CSV-экспорт доступен после входа администратором." })}><Icon name="arrow" />Экспорт CSV</button> : <a className="ghostButton" href="/api/admin/export?kind=daily"><Icon name="arrow" />Экспорт CSV</a>}<button type="button" className="darkButton" onClick={() => setInviteOpen(true)}><Icon name="users" />Новый тейстмейкер</button></div></header>
-      {notice ? <div className={`workspaceNotice ${notice.tone}`}><Icon name={notice.tone === "success" ? "check" : "shield"} /><span>{notice.text}</span><button type="button" onClick={() => setNotice(null)} aria-label="Закрыть"><Icon name="x" size={17} /></button></div> : null}
+      {notice ? <div className={`workspaceNotice ${notice.tone}`}><Icon name={notice.tone === "success" ? "check" : "shield"} /><span>{notice.text}{inviteLink ? <> <a href={inviteLink}>Открыть инвайт</a></> : null}</span><button type="button" onClick={() => { setNotice(null); setInviteLink(null); }} aria-label="Закрыть"><Icon name="x" size={17} /></button></div> : null}
 
       <section className="metricStrip" aria-label="Ключевые метрики">
         <article><span>активные авторы</span><strong>1 <small>/ 3</small></strong><em>1 на паузе · 1 приглашён</em></article>
@@ -62,7 +75,7 @@ export function AdminDashboardClient({ preview }: { preview: boolean }) {
 
       <section className="adminPanel auditPanel"><header><div><span>audit & failures</span><h2>Последние операции</h2></div><button type="button">Все журналы <Icon name="arrow" /></button></header><div className="auditRows"><div><span className="auditIcon success"><Icon name="sync" /></span><div><strong>История синхронизирована</strong><small>Лера Север · fetched 8 · inserted 2</small></div><time>3 мин назад</time><em>SUCCESS</em></div><div><span className="auditIcon"><Icon name="playlist" /></span><div><strong>Live playlist обновлён</strong><small>2 insert · 1 reorder · revision 48</small></div><time>2 мин назад</time><em>SUCCESS</em></div><div><span className="auditIcon privacy"><Icon name="pause" /></span><div><strong>Публикация поставлена на паузу</strong><small>Макс Волна · действие автора</small></div><time>вчера</time><em>PRIVACY</em></div></div></section>
 
-      {inviteOpen ? <div className="modalBackdrop"><section className="workspaceModal"><button type="button" onClick={() => setInviteOpen(false)}><Icon name="x" /></button><span>новый пилотный автор</span><h2>Создать тейстмейкера</h2><label>Имя<input defaultValue="" placeholder="Как будет показано публично" /></label><label>Slug<input defaultValue="" placeholder="taste.app/t/…" /></label><label>Роль / подпись<input defaultValue="" placeholder="музыкант · режиссёр" /></label><div><button type="button" className="ghostButton" onClick={() => setInviteOpen(false)}>Отмена</button><button type="button" className="darkButton" onClick={() => { setInviteOpen(false); void action("create_tastemaker"); }}>Создать и выпустить инвайт</button></div></section></div> : null}
+      {inviteOpen ? <div className="modalBackdrop"><section className="workspaceModal"><button type="button" onClick={() => setInviteOpen(false)}><Icon name="x" /></button><span>новый пилотный автор</span><h2>Создать тейстмейкера</h2><label>Имя<input value={draftMaker.name} onChange={event => setDraftMaker(value => ({ ...value, name: event.target.value }))} placeholder="Как будет показано публично" /></label><label>Slug<input value={draftMaker.slug} onChange={event => setDraftMaker(value => ({ ...value, slug: event.target.value }))} placeholder="taste.app/t/…" /></label><label>Роль / подпись<input value={draftMaker.roleLine} onChange={event => setDraftMaker(value => ({ ...value, roleLine: event.target.value }))} placeholder="музыкант · режиссёр" /></label><div><button type="button" className="ghostButton" onClick={() => setInviteOpen(false)}>Отмена</button><button type="button" className="darkButton" disabled={!draftMaker.name.trim() || !draftMaker.slug.trim() || busy === "create_tastemaker:global"} onClick={() => void action("create_tastemaker", undefined, draftMaker)}>Создать и выпустить инвайт</button></div></section></div> : null}
     </>
   );
 }

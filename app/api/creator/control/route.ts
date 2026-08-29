@@ -3,6 +3,7 @@ import { db, ensureSchema } from "@/lib/server/db";
 import { requireRole } from "@/lib/server/session";
 import { sameOrigin } from "@/lib/server/security";
 import { audit } from "@/lib/server/audit";
+import { syncTastemakerHistory, syncTastemakerPlaylist } from "@/lib/server/sync";
 
 const allowed = new Set(["pause", "resume", "publish_enabled", "delay", "hide_event", "restore_event", "hide_artist", "sync_now", "playlist_sync", "disconnect", "delete_request"]);
 
@@ -19,6 +20,7 @@ export async function POST(request: NextRequest) {
   const tastemakerId = makers[0]?.id as string | undefined;
   if (!tastemakerId) return NextResponse.json({ error: "TASTEMAKER_NOT_BOUND" }, { status: 404 });
   try {
+    let operationResult: unknown;
     if (body.type === "pause" || body.type === "resume") {
       const paused = body.type === "pause";
       await db()`update tastemakers set status = ${paused ? "paused" : "active"}, publish_enabled = ${!paused}, updated_at = now() where id = ${tastemakerId}`;
@@ -37,14 +39,15 @@ export async function POST(request: NextRequest) {
       await db()`update music_connections set encrypted_access_token = null, encrypted_refresh_token = null, status = 'disconnected', updated_at = now() where tastemaker_id = ${tastemakerId}`;
       await db()`update tastemakers set status = 'disconnected', publish_enabled = false, updated_at = now() where id = ${tastemakerId}`;
     } else if (body.type === "sync_now" || body.type === "playlist_sync") {
-      await db()`insert into sync_logs (tastemaker_id, job_type, status, stats) values (${tastemakerId}, ${body.type}, 'queued', '{}'::jsonb)`;
+      operationResult = body.type === "sync_now"
+        ? await syncTastemakerHistory(tastemakerId, true)
+        : await syncTastemakerPlaylist(tastemakerId);
     } else if (body.type === "delete_request") {
       await db()`insert into audit_logs (actor_user_id, action, entity_type, entity_id, metadata) values (${creator.id}, 'data_deletion_requested', 'tastemaker', ${tastemakerId}, ${db().json({ requestedAt: new Date().toISOString() })})`;
     } else return NextResponse.json({ error: "INVALID_ACTION_INPUT" }, { status: 400 });
     await audit(creator.id, `creator_${body.type}`, "tastemaker", tastemakerId, { value: typeof body.value === "string" || typeof body.value === "number" || typeof body.value === "boolean" ? body.value : undefined });
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, result: operationResult });
   } catch {
     return NextResponse.json({ error: "CONTROL_UPDATE_FAILED" }, { status: 500 });
   }
 }
-

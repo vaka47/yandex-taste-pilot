@@ -5,6 +5,7 @@ import { db, ensureSchema } from "@/lib/server/db";
 import { requireRole } from "@/lib/server/session";
 import { sameOrigin } from "@/lib/server/security";
 import { audit } from "@/lib/server/audit";
+import { syncTastemakerHistory, syncTastemakerPlaylist } from "@/lib/server/sync";
 
 const allowed = new Set(["pause", "sync", "playlist_rebuild", "create_tastemaker", "create_invite", "archive"]);
 
@@ -25,8 +26,11 @@ export async function POST(request: NextRequest) {
     if (body.type === "create_tastemaker") {
       if (!body.name || !body.slug) return NextResponse.json({ error: "NAME_AND_SLUG_REQUIRED" }, { status: 400 });
       const created = await db()`insert into tastemakers (name, slug, role_line, status) values (${body.name.slice(0, 100)}, ${body.slug.toLowerCase().replace(/[^a-z0-9-]/g, "-").slice(0, 60)}, ${body.roleLine?.slice(0, 120) || "автор вкуса"}, 'draft') returning id`;
+      const rawToken = randomToken(32);
+      await db()`insert into creator_invites (tastemaker_id, token_hash, expires_at, created_by) values (${created[0].id}, ${hashToken(rawToken)}, now() + interval '7 days', ${admin.id})`;
+      await db()`update tastemakers set status = 'invited', updated_at = now() where id = ${created[0].id}`;
       await audit(admin.id, "tastemaker_created", "tastemaker", created[0].id);
-      return NextResponse.json({ ok: true, id: created[0].id }, { status: 201 });
+      return NextResponse.json({ ok: true, id: created[0].id, inviteUrl: `${appUrl()}/invite/${rawToken}` }, { status: 201 });
     }
     if (body.type === "create_invite" && body.tastemakerId) {
       const rawToken = randomToken(32);
@@ -37,9 +41,11 @@ export async function POST(request: NextRequest) {
     }
     if ((body.type === "sync" || body.type === "playlist_rebuild") && body.tastemakerId) {
       const jobType = body.type === "sync" ? "manual_history_sync" : "manual_playlist_rebuild";
-      const rows = await db()`insert into sync_logs (tastemaker_id, job_type, status, stats) values (${body.tastemakerId}, ${jobType}, 'queued', '{}'::jsonb) returning id`;
-      await audit(admin.id, jobType, "tastemaker", body.tastemakerId, { syncLogId: rows[0].id });
-      return NextResponse.json({ ok: true, queued: true, syncLogId: rows[0].id }, { status: 202 });
+      const result = body.type === "sync"
+        ? await syncTastemakerHistory(body.tastemakerId, true)
+        : await syncTastemakerPlaylist(body.tastemakerId);
+      await audit(admin.id, jobType, "tastemaker", body.tastemakerId, { result });
+      return NextResponse.json({ ok: result.ok, result }, { status: result.ok ? 200 : 502 });
     }
     if (body.type === "archive" && body.tastemakerId) {
       await db()`update tastemakers set status = 'archived', is_public = false, publish_enabled = false, updated_at = now() where id = ${body.tastemakerId}`;
@@ -51,4 +57,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "ACTION_FAILED", detail: error instanceof Error ? error.message.slice(0, 120) : "unknown" }, { status: 500 });
   }
 }
-

@@ -104,3 +104,36 @@ export async function toggleFollow(userId: string, tastemakerId: string, followi
   return Number(rows[0]?.count || 0);
 }
 
+export async function getFollowingProfiles(userId: string) {
+  if (!isDatabaseConfigured()) return [];
+  await ensureSchema();
+  const rows = await db()`
+    select
+      t.id, t.slug, t.name, t.role_line, t.avatar_url,
+      e.id as event_id, e.track_provider_id, e.album_provider_id, e.track_title,
+      e.artist_names, e.cover_tone, e.cover_url, e.yandex_url, e.observed_at,
+      e.fetched_at, e.publish_at, e.visibility, e.hidden_reason
+    from follows f
+    join tastemakers t on t.id = f.tastemaker_id
+      and t.is_public = true and t.status <> 'archived'
+    left join lateral (
+      select listening_events.*
+      from listening_events
+      where listening_events.tastemaker_id = t.id
+        and listening_events.visibility = 'public'
+        and listening_events.publish_at <= now()
+      order by coalesce(listening_events.observed_at, listening_events.fetched_at) desc
+      limit 1
+    ) e on true
+    where f.user_id = ${userId} and f.unfollowed_at is null
+    order by coalesce(e.observed_at, e.fetched_at, f.followed_at) desc
+  `;
+  return rows.map(row => ({
+    id: row.id as string,
+    slug: row.slug as string,
+    name: row.name as string,
+    roleLine: row.role_line as string,
+    avatarUrl: (row.avatar_url as string | null) || null,
+    latestEvent: row.event_id ? rowToEvent({ ...row, id: row.event_id, play_count_7d: 1 }) : null
+  }));
+}
