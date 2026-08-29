@@ -65,6 +65,8 @@ https://YOUR_DOMAIN/auth/yandex/callback
 
 The service-account Yandex Music token must belong to a dedicated pilot account—not a founder's personal account. Prefer `SERVICE_YANDEX_MUSIC_TOKEN_ENCRYPTED`.
 
+On Vercel Hobby, the 5/15-minute scheduler runs through the two protected GitHub Actions workflows in `.github/workflows/`. Configure identical `CRON_SECRET` values in GitHub Actions and the web project, and set the GitHub `APP_URL` secret to the production origin. Vercel Pro may instead use native Cron Jobs.
+
 ## Required external setup before a real account test
 
 - PostgreSQL `DATABASE_URL`;
@@ -84,4 +86,3 @@ npm run build
 ```
 
 The UI has been visually checked at desktop and 390px mobile widths. Public, admin-preview, creator-preview, Follow interstitial, Pause and Device Flow challenge states were exercised in-browser.
-
