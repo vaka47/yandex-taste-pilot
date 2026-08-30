@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Taste</title>
+  <rect width="512" height="512" rx="112" fill="#ffd744"/>
+  <circle cx="256" cy="256" r="168" fill="#11110f"/>
+  <g fill="#ffd744" transform="rotate(-7 256 256)">
+    <rect x="196" y="210" width="24" height="92" rx="12"/>
+    <rect x="244" y="164" width="24" height="184" rx="12"/>
+    <rect x="292" y="194" width="24" height="124" rx="12"/>
+  </g>
+  <circle cx="414" cy="98" r="28" fill="#eb6545" stroke="#11110f" stroke-width="8"/>
+</svg>
