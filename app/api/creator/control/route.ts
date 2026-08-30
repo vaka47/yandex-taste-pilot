@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
   if (!body.type || !allowed.has(body.type)) return NextResponse.json({ error: "ACTION_NOT_ALLOWED" }, { status: 400 });
   await ensureSchema();
   const makers = creator.role === "admin"
-    ? await db()`select id from tastemakers where status <> 'archived' order by created_at limit 1`
+    ? await db()`select id from tastemakers where status <> 'archived' order by (owner_user_id = ${creator.id}) desc, created_at desc limit 1`
     : await db()`select id from tastemakers where owner_user_id = ${creator.id} and status <> 'archived' limit 1`;
   const tastemakerId = makers[0]?.id as string | undefined;
   if (!tastemakerId) return NextResponse.json({ error: "TASTEMAKER_NOT_BOUND" }, { status: 404 });

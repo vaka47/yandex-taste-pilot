@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
   try { creator = await requireRole("creator"); } catch { return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 }); }
   if (!inMemoryRateLimit(`connector:${creator.id}`, 3, 10 * 60_000)) return NextResponse.json({ error: "RATE_LIMITED" }, { status: 429 });
   await ensureSchema();
-  const makers = creator.role === "admin" ? await db()`select id from tastemakers where status <> 'archived' order by created_at limit 1` : await db()`select id from tastemakers where owner_user_id = ${creator.id} limit 1`;
+  const makers = creator.role === "admin" ? await db()`select id from tastemakers where status <> 'archived' order by (owner_user_id = ${creator.id}) desc, created_at desc limit 1` : await db()`select id from tastemakers where owner_user_id = ${creator.id} limit 1`;
   const tastemakerId = makers[0]?.id as string | undefined;
   if (!tastemakerId) return NextResponse.json({ error: "TASTEMAKER_NOT_BOUND" }, { status: 404 });
   try {
@@ -26,4 +26,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "CONNECTOR_START_FAILED" }, { status: 502 });
   }
 }
-
