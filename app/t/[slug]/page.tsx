@@ -3,6 +3,7 @@ import { ProfileClient } from "@/components/ProfileClient";
 import { PublicHeader } from "@/components/PublicHeader";
 import { getPublicProfile } from "@/lib/server/repository";
 import { getSessionUser } from "@/lib/server/session";
+import { isAdminYandexId } from "@/lib/server/config";
 
 export const dynamic = "force-dynamic";
 
@@ -13,8 +14,8 @@ export default async function TastemakerPage({ params }: { params: Promise<{ slu
   if (!profile) notFound();
   return (
     <div className="publicShell">
-      <PublicHeader />
-      <ProfileClient initialProfile={profile} session={session} />
+      <PublicHeader session={session} />
+      <ProfileClient initialProfile={profile} session={session} ownerView={Boolean(session?.role === "admin" && session.authContext === "owner_password" && isAdminYandexId(session.yandexId))} />
       <footer className="publicFooter">
         <div><strong>Taste</strong><span>Музыкальный вкус — это сигнал, а не алгоритм.</span></div>
         <nav><a href="/about">О продукте</a><a href="/privacy">Приватность</a><a href="mailto:privacy@tastepilot.app">Удаление данных</a></nav>
@@ -23,4 +24,3 @@ export default async function TastemakerPage({ params }: { params: Promise<{ slu
     </div>
   );
 }
-

@@ -5,7 +5,7 @@ import { db, ensureSchema } from "@/lib/server/db";
 import { requireRole } from "@/lib/server/session";
 import { sameOrigin } from "@/lib/server/security";
 import { audit } from "@/lib/server/audit";
-import { syncTastemakerHistory, syncTastemakerPlaylist } from "@/lib/server/sync";
+import { syncTastemakerFully, syncTastemakerPlaylist } from "@/lib/server/sync";
 
 const allowed = new Set(["pause", "sync", "playlist_rebuild", "create_tastemaker", "create_invite", "archive"]);
 
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     if ((body.type === "sync" || body.type === "playlist_rebuild") && body.tastemakerId) {
       const jobType = body.type === "sync" ? "manual_history_sync" : "manual_playlist_rebuild";
       const result = body.type === "sync"
-        ? await syncTastemakerHistory(body.tastemakerId, true)
+        ? await syncTastemakerFully(body.tastemakerId, true)
         : await syncTastemakerPlaylist(body.tastemakerId);
       await audit(admin.id, jobType, "tastemaker", body.tastemakerId, { result });
       return NextResponse.json({ ok: result.ok, result }, { status: result.ok ? 200 : 502 });

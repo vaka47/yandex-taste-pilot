@@ -58,6 +58,7 @@ async function createSchema() {
     create table if not exists sessions (
       token_hash text primary key,
       user_id uuid not null references users(id) on delete cascade,
+      auth_context text not null default 'yandex' check (auth_context in ('yandex','owner_password')),
       expires_at timestamptz not null,
       created_at timestamptz not null default now()
     )
@@ -76,7 +77,8 @@ async function createSchema() {
       status text not null default 'draft' check (status in ('draft','invited','connected','active','paused','disconnected','archived')),
       is_public boolean not null default false,
       publish_enabled boolean not null default false,
-      publication_delay_seconds integer not null default 86400,
+      publication_delay_seconds integer not null default 0,
+      sync_interval_seconds integer not null default 300 check (sync_interval_seconds in (300, 900, 3600)),
       fixture boolean not null default false,
       consent_version text,
       consent_at timestamptz,
@@ -292,6 +294,18 @@ async function createSchema() {
       updated_at timestamptz not null default now()
     )
   `;
+  await sql`alter table sessions add column if not exists auth_context text not null default 'yandex'`;
+  await sql`alter table tastemakers add column if not exists sync_interval_seconds integer not null default 300`;
+  await sql`alter table tastemakers alter column publication_delay_seconds set default 0`;
+  await sql`
+    create table if not exists admin_login_attempts (
+      id uuid primary key default gen_random_uuid(),
+      client_key text not null,
+      attempted_at timestamptz not null default now()
+    )
+  `;
+  await sql`create index if not exists admin_login_attempts_key_idx on admin_login_attempts(client_key, attempted_at desc)`;
+  await sql`update tastemakers set name = 'Сафонов Иван', updated_at = now() where slug = 'pilot-author' and name = 'Пилотный автор'`;
 }
 
 export async function ensureSchema() {

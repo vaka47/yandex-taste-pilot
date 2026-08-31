@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
       const separator = target.includes("?") ? "&" : "?";
       target = `${target}${separator}follow=completed`;
     }
-    await recordAnalytics({ eventName: "auth_completed", user: { id: user.id, role: user.role as "user" | "creator" | "admin", displayName: user.displayName, avatarUrl: null, yandexId: user.yandexId }, tastemakerId: saved.follow || null });
+    await recordAnalytics({ eventName: "auth_completed", user: { id: user.id, role: user.role as "user" | "creator" | "admin", displayName: user.displayName, avatarUrl: null, yandexId: user.yandexId, authContext: "yandex" }, tastemakerId: saved.follow || null });
     await createSession(user.id);
     const response = NextResponse.redirect(new URL(target, appUrl()));
     response.cookies.delete("taste_oauth");

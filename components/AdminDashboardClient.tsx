@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Icon } from "@/components/Icons";
-import { fixtureAdminTastemakers, fixtureAnalytics } from "@/lib/fixtures";
 import { fullNumber, percent, relativeTime } from "@/lib/format";
 import type { AdminDashboardData, AdminTastemakerRow } from "@/lib/server/dashboard";
 
@@ -10,79 +9,68 @@ type Notice = { tone: "success" | "warning"; text: string } | null;
 type NewTastemaker = { name: string; slug: string; roleLine: string };
 type Challenge = { id: string; userCode: string; verificationUrl: string; expiresAt: string; interval: number };
 
-const previewTastemakers: AdminTastemakerRow[] = fixtureAdminTastemakers.map(item => ({
-  id: item.id, slug: item.slug, name: item.name, status: item.status,
-  followerCount: item.followerCount, visitors7d: item.visitors7d, trackOpens7d: item.trackOpens7d,
-  lastSyncAt: item.lastSyncAt, playlistStatus: item.playlistStatus as AdminTastemakerRow["playlistStatus"],
-  connectionStatus: item.connectionStatus as AdminTastemakerRow["connectionStatus"]
-}));
+const statusLabels: Record<string, string> = {
+  draft: "черновик", invited: "приглашён", connected: "подключён", active: "активен", paused: "на паузе", disconnected: "отключён", archived: "в архиве"
+};
+const connectionLabels: Record<string, string> = {
+  connected: "подключено", pending: "ожидает", error: "ошибка", disconnected: "отключено", not_connected: "не подключено", starting: "начинаем", waiting: "ждём подтверждения"
+};
+const playlistLabels: Record<string, string> = { healthy: "работает", paused: "на паузе", error: "ошибка", not_created: "не создан" };
 
 function auditLabel(action: string) {
   const labels: Record<string, string> = {
-    tastemaker_created: "Тейстмейкер создан", creator_invite_claimed: "Инвайт автора принят",
+    tastemaker_created: "Тейстмейкер создан", creator_invite_claimed: "Приглашение принято", creator_invite_created: "Выпущено новое приглашение",
     connector_device_flow_started: "Подключение Яндекс Музыки начато", connector_connected: "Яндекс Музыка подключена",
-    service_connector_device_flow_started: "Подключение сервисного аккаунта начато", service_connector_connected: "Сервисный аккаунт подключён",
-    creator_sync_now: "История синхронизирована", creator_playlist_sync: "Live-плейлист обновлён",
-    creator_pause: "Публикация поставлена на паузу", admin_paused_tastemaker: "Публикация поставлена на паузу"
+    service_connector_device_flow_started: "Подключение followtaste начато", service_connector_connected: "followtaste подключён",
+    creator_sync_now: "История и плейлист обновлены", creator_playlist_sync: "Плейлист обновлён",
+    creator_profile_updated: "Публичная страница изменена", creator_pause: "Публикация поставлена на паузу",
+    admin_paused_tastemaker: "Публикация поставлена на паузу", admin_resumed_tastemaker: "Публикация возобновлена"
   };
-  return labels[action] || action.replaceAll("_", " ");
+  return labels[action] || "Системное действие";
 }
 
-export function AdminDashboardClient({ preview, initialData }: { preview: boolean; initialData: AdminDashboardData | null }) {
-  const [notice, setNotice] = useState<Notice>(preview ? { tone: "warning", text: "Preview использует тестовые данные. Все production-действия защищены серверной ролью admin." } : null);
+export function AdminDashboardClient({ initialData }: { initialData: AdminDashboardData }) {
+  const [notice, setNotice] = useState<Notice>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [draftMaker, setDraftMaker] = useState<NewTastemaker>({ name: "", slug: "", roleLine: "" });
   const [serviceConnectOpen, setServiceConnectOpen] = useState(false);
   const [serviceChallenge, setServiceChallenge] = useState<Challenge | null>(null);
-  const [serviceState, setServiceState] = useState<"connected" | "pending" | "error" | "disconnected" | "not_connected" | "starting" | "waiting">(preview || !initialData ? "not_connected" : initialData.serviceConnection.status);
-  const [serviceLogin, setServiceLogin] = useState(preview || !initialData ? null : initialData.serviceConnection.login);
-  const [tastemakers, setTastemakers] = useState<AdminTastemakerRow[]>(preview || !initialData ? previewTastemakers : initialData.tastemakers);
-  const metrics = preview || !initialData ? fixtureAnalytics : initialData.metrics;
+  const [serviceState, setServiceState] = useState<"connected" | "pending" | "error" | "disconnected" | "not_connected" | "starting" | "waiting">(initialData.serviceConnection.status);
+  const [serviceLogin, setServiceLogin] = useState(initialData.serviceConnection.login);
+  const [tastemakers, setTastemakers] = useState<AdminTastemakerRow[]>(initialData.tastemakers);
+  const metrics = initialData.metrics;
   const activeCount = tastemakers.filter(item => item.status === "active").length;
-  const pausedCount = tastemakers.filter(item => item.status === "paused").length;
-  const invitedCount = tastemakers.filter(item => ["draft", "invited"].includes(item.status)).length;
   const connectedCount = tastemakers.filter(item => item.connectionStatus === "connected").length;
   const lastSyncAt = tastemakers.map(item => item.lastSyncAt).filter((value): value is string => Boolean(value)).sort().at(-1) || null;
-  const funnel = useMemo(() => [
-    { label: "Уникальные посетители", value: metrics.uniqueVisitors7d, width: 100 },
-    { label: "Нажали Follow", value: metrics.followClicks7d, width: metrics.uniqueVisitors7d ? metrics.followClicks7d / metrics.uniqueVisitors7d * 100 : 0 },
-    { label: "Завершили вход", value: metrics.follows7d, width: metrics.uniqueVisitors7d ? metrics.follows7d / metrics.uniqueVisitors7d * 100 : 0 },
-    { label: "Подписались", value: metrics.follows7d, width: metrics.uniqueVisitors7d ? metrics.follows7d / metrics.uniqueVisitors7d * 100 : 0 }
-  ], [metrics]);
 
   useEffect(() => {
-    if (!serviceChallenge || preview || serviceState !== "waiting") return;
+    if (!serviceChallenge || serviceState !== "waiting") return;
     const interval = window.setInterval(async () => {
       const response = await fetch(`/api/admin/music-service/connect/status/${serviceChallenge.id}`, { cache: "no-store" });
       const payload = await response.json().catch(() => ({})) as { status?: string; account?: { login?: string | null }; error?: string };
       if (payload.status === "connected") {
         setServiceState("connected");
-        setServiceLogin(payload.account?.login || "подключён");
+        setServiceLogin(payload.account?.login || "followtaste");
         setServiceChallenge(null);
         setServiceConnectOpen(false);
-        setNotice({ tone: "success", text: "Сервисный аккаунт подключён. Live-плейлисты готовы к синхронизации." });
+        setNotice({ tone: "success", text: "Аккаунт followtaste подключён. Плейлисты готовы к автоматическому обновлению." });
       } else if (!response.ok && response.status !== 202) {
         setServiceState("error");
-        setNotice({ tone: "warning", text: payload.error || "Не удалось подключить сервисный аккаунт." });
+        setNotice({ tone: "warning", text: payload.error || "Не удалось подключить followtaste." });
       }
     }, Math.max(5000, serviceChallenge.interval * 1000));
     return () => window.clearInterval(interval);
-  }, [preview, serviceChallenge, serviceState]);
+  }, [serviceChallenge, serviceState]);
 
   async function startServiceConnection() {
     setServiceState("starting");
-    if (preview) {
-      setServiceChallenge({ id: "preview-service", userCode: "PLST-2026", verificationUrl: "https://oauth.yandex.ru/device", expiresAt: new Date(Date.now() + 600_000).toISOString(), interval: 5 });
-      setServiceState("waiting");
-      return;
-    }
     const response = await fetch("/api/admin/music-service/connect/start", { method: "POST" });
     const payload = await response.json().catch(() => ({})) as Challenge & { error?: string };
     if (!response.ok) {
       setServiceState("error");
-      setNotice({ tone: "warning", text: payload.error || "Не удалось начать подключение сервисного аккаунта." });
+      setNotice({ tone: "warning", text: payload.error || "Не удалось начать подключение followtaste." });
       return;
     }
     setServiceChallenge(payload);
@@ -90,61 +78,52 @@ export function AdminDashboardClient({ preview, initialData }: { preview: boolea
   }
 
   async function action(type: string, tastemakerId?: string, payload: Partial<NewTastemaker> = {}) {
-    if (preview) {
-      setNotice({ tone: "warning", text: "В preview действие показано без записи. Подключите DATABASE_URL и войдите администратором, чтобы выполнить его." });
-      if (type === "pause" && tastemakerId) setTastemakers(items => items.map(item => item.id === tastemakerId ? { ...item, status: item.status === "paused" ? "active" : "paused" } : item));
-      if (type === "create_tastemaker") setInviteOpen(false);
-      return;
-    }
     setBusy(`${type}:${tastemakerId || "global"}`);
     const response = await fetch("/api/admin/action", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ type, tastemakerId, ...payload }) });
     const result = await response.json().catch(() => ({})) as { id?: string; inviteUrl?: string };
     setBusy(null);
-    if (response.ok && type === "create_tastemaker" && result.inviteUrl) {
-      if (result.id) setTastemakers(items => [{ id: result.id!, slug: payload.slug || "new-author", name: payload.name || "Новый автор", status: "invited", followerCount: 0, visitors7d: 0, trackOpens7d: 0, lastSyncAt: null, playlistStatus: "not_created", connectionStatus: "not_connected" }, ...items]);
+    if (response.ok && result.inviteUrl) {
+      if (type === "create_tastemaker" && result.id) {
+        setTastemakers(items => [{ id: result.id!, slug: payload.slug || "new-author", name: payload.name || "Новый автор", avatarUrl: null, status: "invited", followerCount: 0, profileViews7d: 0, uniqueVisitors7d: 0, followClicks7d: 0, follows7d: 0, trackOpens7d: 0, playlistOpens7d: 0, shares7d: 0, lastSyncAt: null, playlistUrl: null, playlistStatus: "not_created", connectionStatus: "not_connected" }, ...items]);
+        setInviteOpen(false);
+        setDraftMaker({ name: "", slug: "", roleLine: "" });
+      }
       setInviteLink(result.inviteUrl);
-      setInviteOpen(false);
-      setDraftMaker({ name: "", slug: "", roleLine: "" });
       await navigator.clipboard?.writeText(result.inviteUrl).catch(() => undefined);
-      setNotice({ tone: "success", text: "Тейстмейкер создан. Инвайт скопирован в буфер обмена." });
+      setNotice({ tone: "success", text: "Одноразовая ссылка скопирована. После первой регистрации она сгорит." });
       return;
     }
     if (response.ok && type === "pause" && tastemakerId) setTastemakers(items => items.map(item => item.id === tastemakerId ? { ...item, status: item.status === "paused" ? "active" : "paused", playlistStatus: item.status === "paused" ? item.playlistStatus : "paused" } : item));
-    setNotice(response.ok ? { tone: "success", text: "Действие выполнено и записано в audit log." } : { tone: "warning", text: "Действие не выполнено. Проверьте поля, роль и состояние подключения." });
+    setNotice(response.ok ? { tone: "success", text: type === "sync" ? "История проверена, плейлист обновлён." : "Изменение применено." } : { tone: "warning", text: "Действие не выполнено. Проверьте состояние подключения." });
   }
 
   return (
     <>
-      <header className="workspaceTopbar"><div><span>операционный центр / 7 дней</span><h1>Пилот под контролем</h1></div><div>{preview ? <button type="button" className="ghostButton" onClick={() => setNotice({ tone: "warning", text: "CSV-экспорт доступен после входа администратором." })}><Icon name="arrow" />Экспорт CSV</button> : <a className="ghostButton" href="/api/admin/export?kind=daily"><Icon name="arrow" />Экспорт CSV</a>}<button type="button" className="darkButton" onClick={() => setInviteOpen(true)}><Icon name="users" />Новый тейстмейкер</button></div></header>
-      {notice ? <div className={`workspaceNotice ${notice.tone}`}><Icon name={notice.tone === "success" ? "check" : "shield"} /><span>{notice.text}{inviteLink ? <> <a href={inviteLink}>Открыть инвайт</a></> : null}</span><button type="button" onClick={() => { setNotice(null); setInviteLink(null); }} aria-label="Закрыть"><Icon name="x" size={17} /></button></div> : null}
+      <header className="workspaceTopbar"><div><span>кабинет владельца · последние 7 дней</span><h1>Пилот под контролем</h1></div><div><a className="ghostButton" href="/api/admin/export?kind=daily"><Icon name="arrow" />Скачать отчёт</a><button type="button" className="darkButton" onClick={() => setInviteOpen(true)}><Icon name="users" />Пригласить тейстмейкера</button></div></header>
+      {notice ? <div className={`workspaceNotice ${notice.tone}`} role="status"><Icon name={notice.tone === "success" ? "check" : "shield"} /><span>{notice.text}{inviteLink ? <> <a href={inviteLink} target="_blank" rel="noreferrer">Открыть ссылку</a></> : null}</span><button type="button" onClick={() => { setNotice(null); setInviteLink(null); }} aria-label="Закрыть"><Icon name="x" size={17} /></button></div> : null}
 
-      <section className="metricStrip" aria-label="Ключевые метрики">
-        <article><span>активные авторы</span><strong>{activeCount} <small>/ {tastemakers.length}</small></strong><em>{pausedCount} на паузе · {invitedCount} приглашено</em></article>
-        <article><span>посетители · 7д</span><strong>{fullNumber(metrics.uniqueVisitors7d)}</strong><em className={preview ? "up" : ""}>{preview ? "↑ 22,4% к прошлой неделе" : "production · first-party"}</em></article>
-        <article><span>новые подписки · 7д</span><strong>{fullNumber(metrics.follows7d)}</strong><em>{percent(metrics.follows7d, metrics.uniqueVisitors7d)} конверсия</em></article>
-        <article><span>music intent · 7д</span><strong>{fullNumber(metrics.trackOpens7d)}</strong><em>{percent(metrics.trackOpens7d, metrics.uniqueVisitors7d)} открыли трек</em></article>
-        <article className="metricAlert"><span>ошибки синхронизации</span><strong>{preview ? 0 : initialData?.syncErrors || 0}</strong><em>{!preview && initialData?.syncErrors ? "нужна проверка журнала" : "все контуры здоровы"}</em></article>
+      <section className="metricStrip" aria-label="Общие показатели">
+        <article><span>активные авторы</span><strong>{activeCount} <small>/ {tastemakers.length}</small></strong><em>{connectedCount} подключили историю</em></article>
+        <article><span>уникальные посетители · 7 дней</span><strong>{fullNumber(metrics.uniqueVisitors7d)}</strong><em>{fullNumber(metrics.profileViews7d)} просмотров</em></article>
+        <article><span>новые подписки · 7 дней</span><strong>{fullNumber(metrics.follows7d)}</strong><em>{percent(metrics.follows7d, metrics.uniqueVisitors7d)} от посетителей</em></article>
+        <article><span>переходы к музыке · 7 дней</span><strong>{fullNumber(metrics.trackOpens7d + metrics.playlistOpens7d)}</strong><em>{fullNumber(metrics.trackOpens7d)} к трекам · {fullNumber(metrics.playlistOpens7d)} к плейлистам</em></article>
+        <article className="metricAlert"><span>ошибки за сутки</span><strong>{initialData.syncErrors}</strong><em>{initialData.syncErrors ? "нужна проверка" : "синхронизация работает"}</em></article>
       </section>
 
-      <section className="adminGrid">
-        <article className="adminPanel adminTablePanel" id="tastemakers">
-          <header><div><span>live operations</span><h2>Тейстмейкеры</h2></div><button type="button"><Icon name="search" />Поиск</button></header>
-          <div className="adminTableWrap"><table><thead><tr><th>Автор</th><th>Статус</th><th>Подписчики</th><th>Посетители · 7д</th><th>Последний sync</th><th>Playlist</th><th /></tr></thead><tbody>{tastemakers.map(item => <tr key={item.id}><td><span className={`tableAvatar avatar-${item.slug}`}>{item.name.split(" ").map(word => word[0]).join("")}</span><div><strong>{item.name}</strong><small>/t/{item.slug}</small></div></td><td><span className={`statusTag status-${item.status}`}><i />{item.status}</span></td><td>{fullNumber(item.followerCount)}</td><td>{fullNumber(item.visitors7d)}</td><td>{item.lastSyncAt ? relativeTime(item.lastSyncAt) : "—"}</td><td><span className={`playlistState ${item.playlistStatus}`}>{item.playlistStatus.replace("_", " ")}</span></td><td><button type="button" className="rowMenu" aria-label={`Действия ${item.name}`} onClick={() => void action("pause", item.id)}>{busy === `pause:${item.id}` ? "…" : "•••"}</button></td></tr>)}</tbody></table></div>
-        </article>
-
-        <article className="adminPanel healthPanel" id="sync"><header><div><span>connector health</span><h2>Система</h2></div><span className="healthyDot"><i />healthy</span></header><div className="healthList"><div><span><i className="serviceDot" />Web + PostgreSQL</span><strong>online</strong></div><div><span><i className="serviceDot" />Music connector</span><strong>online</strong></div><div><span><i className="serviceDot" />Сервисный аккаунт</span><strong>{serviceState === "connected" ? serviceLogin || "connected" : serviceState}</strong></div><div><span><i className="serviceDot" />Подключённые авторы</span><strong>{connectedCount} / {tastemakers.length}</strong></div><div><span><i className="serviceDot" />Последний sync</span><strong>{lastSyncAt ? relativeTime(lastSyncAt) : "ещё не запускался"}</strong></div></div><div className="healthActions"><button type="button" className="panelAction" onClick={() => setServiceConnectOpen(true)}><Icon name="playlist" />{serviceState === "connected" ? "Переподключить сервис" : "Подключить сервис"}</button><button type="button" className="panelAction" disabled={!tastemakers[0]} onClick={() => tastemakers[0] && void action("sync", tastemakers[0].id)}><Icon name="sync" />Синхронизировать сейчас</button></div></article>
+      <section className="adminPanel makersPanel" id="tastemakers">
+        <header><div><span>аналитика по каждому автору</span><h2>Тейстмейкеры</h2></div><small>Нажмите на карточку, чтобы увидеть всю воронку</small></header>
+        <div className="adminMakerGrid">{tastemakers.map(item => <details className="adminMakerCard" key={item.id}><summary><span className="tableAvatar">{item.avatarUrl ? <img src={item.avatarUrl} alt="" /> : item.name.split(" ").map(word => word[0]).join("").slice(0, 2)}</span><div><strong>{item.name}</strong><small>/t/{item.slug}</small></div><span className={`statusTag status-${item.status}`}><i />{statusLabels[item.status]}</span><div className="makerHeadlineMetric"><strong>{fullNumber(item.uniqueVisitors7d)}</strong><small>посетителей</small></div><div className="makerHeadlineMetric"><strong>{fullNumber(item.followerCount)}</strong><small>подписчиков</small></div><Icon name="arrow" /></summary><div className="makerAnalytics"><div><span>Просмотры страницы</span><strong>{fullNumber(item.profileViews7d)}</strong></div><div><span>Уникальные посетители</span><strong>{fullNumber(item.uniqueVisitors7d)}</strong></div><div><span>Нажали «Следить»</span><strong>{fullNumber(item.followClicks7d)}</strong></div><div><span>Новые подписки</span><strong>{fullNumber(item.follows7d)}</strong><small>{percent(item.follows7d, item.uniqueVisitors7d)} конверсия</small></div><div><span>Открыли трек</span><strong>{fullNumber(item.trackOpens7d)}</strong></div><div><span>Открыли плейлист</span><strong>{fullNumber(item.playlistOpens7d)}</strong></div><div><span>Поделились</span><strong>{fullNumber(item.shares7d)}</strong></div><div><span>Последнее обновление</span><strong>{item.lastSyncAt ? relativeTime(item.lastSyncAt) : "не было"}</strong></div></div><footer><div><span>История: <b>{connectionLabels[item.connectionStatus]}</b></span><span>Плейлист: <b>{playlistLabels[item.playlistStatus]}</b></span></div><nav><a href={`/t/${item.slug}`} target="_blank" rel="noreferrer"><Icon name="eye" />Открыть страницу</a><button type="button" disabled={busy === `sync:${item.id}`} onClick={() => void action("sync", item.id)}><Icon name="sync" />{busy === `sync:${item.id}` ? "Обновляем…" : "Обновить"}</button><button type="button" onClick={() => void action("create_invite", item.id)}><Icon name="copy" />Новый инвайт</button><button type="button" onClick={() => void action("pause", item.id)}><Icon name={item.status === "paused" ? "play" : "pause"} />{item.status === "paused" ? "Возобновить" : "На паузу"}</button></nav></footer></details>)}</div>
       </section>
 
-      <section className="adminGrid analyticsGrid" id="analytics">
-        <article className="adminPanel funnelPanel"><header><div><span>first-party funnel</span><h2>Профиль → Follow</h2></div><strong>{percent(metrics.follows7d, metrics.uniqueVisitors7d)}</strong></header><div className="funnelBars">{funnel.map((step, index) => <div key={step.label}><span>0{index + 1}</span><div><i style={{ width: `${step.width}%` }} /></div><strong>{fullNumber(step.value)}</strong><em>{step.label}</em></div>)}</div><footer><span>Follow click → completion</span><strong>{percent(metrics.follows7d, metrics.followClicks7d)}</strong></footer></article>
-        <article className="adminPanel intentPanel"><header><div><span>music intent</span><h2>Открытия</h2></div><span>7 дней</span></header><div className="intentNumbers"><div><strong>{fullNumber(metrics.trackOpens7d)}</strong><span>треков</span></div><div><strong>{fullNumber(metrics.playlistOpens7d)}</strong><span>плейлиста</span></div></div><div className="miniChart" aria-label="График открытий за семь дней">{(preview ? [42, 56, 38, 64, 71, 52, 86] : [4, 4, 4, 4, 4, 4, 4]).map((value, index) => <i key={index} style={{ height: `${value}%` }}><span>{["Пн","Вт","Ср","Чт","Пт","Сб","Вс"][index]}</span></i>)}</div></article>
-        <article className="adminPanel retentionPanel"><header><div><span>cohort retention</span><h2>Возвращаются</h2></div></header><div><span>D1<strong>{metrics.d1Retention.toString().replace(".", ",")}%</strong></span><span>D7<strong>{metrics.d7Retention.toString().replace(".", ",")}%</strong></span><span>D14<strong>—</strong></span></div><p>D7 = визит на 6–8 календарный день после первого просмотра.</p></article>
+      <section className="adminGrid" id="sync">
+        <article className="adminPanel healthPanel"><header><div><span>состояние системы</span><h2>Автоматическая публикация</h2></div><span className={`healthyDot ${initialData.syncErrors ? "hasError" : ""}`}><i />{initialData.syncErrors ? "есть ошибки" : "работает"}</span></header><div className="healthList"><div><span><i className="serviceDot" />Приложение и база</span><strong>работают</strong></div><div><span><i className="serviceDot" />Связь с Яндекс Музыкой</span><strong>работает</strong></div><div><span><i className="serviceDot" />Аккаунт followtaste</span><strong>{serviceState === "connected" ? serviceLogin || "подключён" : connectionLabels[serviceState]}</strong></div><div><span><i className="serviceDot" />Подключённые авторы</span><strong>{connectedCount} / {tastemakers.length}</strong></div><div><span><i className="serviceDot" />Последнее обновление</span><strong>{lastSyncAt ? relativeTime(lastSyncAt) : "ещё не запускалось"}</strong></div></div><div className="healthActions"><button type="button" className="panelAction" onClick={() => setServiceConnectOpen(true)}><Icon name="playlist" />{serviceState === "connected" ? "Переподключить followtaste" : "Подключить followtaste"}</button></div></article>
+        <article className="adminPanel automationPanel"><header><div><span>как работает публикация</span><h2>Без ручных действий</h2></div><Icon name="sync" /></header><ol><li><b>1</b><span>Каждые 5 минут Taste проверяет историю подключённых авторов.</span></li><li><b>2</b><span>Яндекс отдаёт треки, дослушанные до конца.</span></li><li><b>3</b><span>Новый трек сразу попадает на страницу и в плейлист followtaste.</span></li></ol><p>Автор может выбрать задержку 24 часа или более редкую проверку в своём кабинете.</p></article>
       </section>
 
-      <section className="adminPanel auditPanel"><header><div><span>audit & failures</span><h2>Последние операции</h2></div><button type="button">Все журналы <Icon name="arrow" /></button></header><div className="auditRows">{preview ? <><div><span className="auditIcon success"><Icon name="sync" /></span><div><strong>История синхронизирована</strong><small>Лера Север · тестовые данные</small></div><time>3 мин назад</time><em>SUCCESS</em></div><div><span className="auditIcon"><Icon name="playlist" /></span><div><strong>Live playlist обновлён</strong><small>preview · revision 48</small></div><time>2 мин назад</time><em>SUCCESS</em></div></> : initialData?.recentAudits.length ? initialData.recentAudits.slice(0, 4).map(item => <div key={item.id}><span className="auditIcon success"><Icon name="check" /></span><div><strong>{auditLabel(item.action)}</strong><small>{item.entityName || "системная операция"}</small></div><time>{relativeTime(item.createdAt)}</time><em>RECORDED</em></div>) : <div><span className="auditIcon"><Icon name="clock" /></span><div><strong>Операций пока нет</strong><small>Журнал начнёт заполняться после действий пилота.</small></div><time>—</time><em>READY</em></div>}</div></section>
+      <section className="adminPanel auditPanel"><header><div><span>журнал изменений</span><h2>Последние операции</h2></div></header><div className="auditRows">{initialData.recentAudits.length ? initialData.recentAudits.slice(0, 6).map(item => <div key={item.id}><span className="auditIcon success"><Icon name="check" /></span><div><strong>{auditLabel(item.action)}</strong><small>{item.entityName || "системная операция"}</small></div><time>{relativeTime(item.createdAt)}</time><em>записано</em></div>) : <div><span className="auditIcon"><Icon name="clock" /></span><div><strong>Операций пока нет</strong><small>Журнал заполнится после первых действий.</small></div><time>—</time><em>готов</em></div>}</div></section>
 
-      {inviteOpen ? <div className="modalBackdrop"><section className="workspaceModal"><button type="button" onClick={() => setInviteOpen(false)}><Icon name="x" /></button><span>новый пилотный автор</span><h2>Создать тейстмейкера</h2><label>Имя<input value={draftMaker.name} onChange={event => setDraftMaker(value => ({ ...value, name: event.target.value }))} placeholder="Как будет показано публично" /></label><label>Slug<input value={draftMaker.slug} onChange={event => setDraftMaker(value => ({ ...value, slug: event.target.value }))} placeholder="taste.app/t/…" /></label><label>Роль / подпись<input value={draftMaker.roleLine} onChange={event => setDraftMaker(value => ({ ...value, roleLine: event.target.value }))} placeholder="музыкант · режиссёр" /></label><div><button type="button" className="ghostButton" onClick={() => setInviteOpen(false)}>Отмена</button><button type="button" className="darkButton" disabled={!draftMaker.name.trim() || !draftMaker.slug.trim() || busy === "create_tastemaker:global"} onClick={() => void action("create_tastemaker", undefined, draftMaker)}>Создать и выпустить инвайт</button></div></section></div> : null}
-      {serviceConnectOpen ? <div className="modalBackdrop"><section className="workspaceModal deviceModal"><button type="button" onClick={() => { setServiceConnectOpen(false); setServiceChallenge(null); }}><Icon name="x" /></button><span>playlist delivery · followtaste</span><h2>Аккаунт-издатель</h2>{!serviceChallenge ? <><p>Подключите технический аккаунт <b>followtaste</b>. Он не является источником истории: в нём Taste создаёт публичные live-плейлисты всех участников пилота.</p><div className="consentChecklist"><span><Icon name="check" />Источник истории — личный аккаунт каждого автора</span><span><Icon name="check" />followtaste только создаёт и обновляет плейлисты</span><span><Icon name="check" />Токен хранится только в зашифрованном виде</span></div><button className="darkButton wideButton" type="button" onClick={() => void startServiceConnection()}>{serviceState === "starting" ? "Получаем код…" : "Получить код для followtaste"}</button></> : <><p>На странице Яндекса переключитесь именно на <b>followtaste</b>, введите код и подтвердите доступ.</p><div className="deviceCode"><small>код аккаунта followtaste</small><strong>{serviceChallenge.userCode}</strong><button type="button" onClick={() => void navigator.clipboard.writeText(serviceChallenge.userCode)}><Icon name="copy" />Копировать</button></div><a className="darkButton wideButton" href={serviceChallenge.verificationUrl} target="_blank" rel="noreferrer">Открыть страницу Яндекса <Icon name="arrow" /></a><div className="waitingState"><i /><span>Ждём подтверждения followtaste. Админку можно оставить открытой.</span></div></>}</section></div> : null}
+      {inviteOpen ? <div className="modalBackdrop" role="presentation" onMouseDown={event => { if (event.currentTarget === event.target) setInviteOpen(false); }}><section className="workspaceModal"><button type="button" onClick={() => setInviteOpen(false)} aria-label="Закрыть"><Icon name="x" /></button><span>новый автор</span><h2>Пригласить тейстмейкера</h2><label>Имя<input value={draftMaker.name} maxLength={100} onChange={event => setDraftMaker(value => ({ ...value, name: event.target.value }))} placeholder="Как будет показано публично" /></label><label>Адрес страницы<input value={draftMaker.slug} maxLength={60} onChange={event => setDraftMaker(value => ({ ...value, slug: event.target.value }))} placeholder="ivan-petrov" /></label><label>Короткая подпись<input value={draftMaker.roleLine} maxLength={120} onChange={event => setDraftMaker(value => ({ ...value, roleLine: event.target.value }))} placeholder="музыкант · режиссёр" /></label><p>Ссылка действует 7 дней и сгорает сразу после регистрации этого автора.</p><div><button type="button" className="ghostButton" onClick={() => setInviteOpen(false)}>Отмена</button><button type="button" className="darkButton" disabled={!draftMaker.name.trim() || !draftMaker.slug.trim() || busy === "create_tastemaker:global"} onClick={() => void action("create_tastemaker", undefined, draftMaker)}>{busy === "create_tastemaker:global" ? "Создаём…" : "Создать и скопировать ссылку"}</button></div></section></div> : null}
+      {serviceConnectOpen ? <div className="modalBackdrop"><section className="workspaceModal deviceModal"><button type="button" onClick={() => { setServiceConnectOpen(false); setServiceChallenge(null); }} aria-label="Закрыть"><Icon name="x" /></button><span>аккаунт-издатель · followtaste</span><h2>Подключить плейлисты</h2>{!serviceChallenge ? <><p>Аккаунт <b>followtaste</b> не является источником истории. Taste создаёт и обновляет в нём публичные плейлисты всех участников.</p><div className="consentChecklist"><span><Icon name="check" />История берётся из личного аккаунта автора</span><span><Icon name="check" />followtaste только публикует плейлисты</span><span><Icon name="check" />Доступ хранится в зашифрованном виде</span></div><button className="darkButton wideButton" type="button" onClick={() => void startServiceConnection()}>{serviceState === "starting" ? "Получаем код…" : "Получить код для followtaste"}</button></> : <><p>На странице Яндекса выберите именно <b>followtaste</b>, введите код и подтвердите доступ.</p><div className="deviceCode"><small>код аккаунта followtaste</small><strong>{serviceChallenge.userCode}</strong><button type="button" onClick={() => void navigator.clipboard.writeText(serviceChallenge.userCode)}><Icon name="copy" />Копировать</button></div><a className="darkButton wideButton" href={serviceChallenge.verificationUrl} target="_blank" rel="noreferrer">Открыть Яндекс <Icon name="arrow" /></a><div className="waitingState"><i /><span>Ждём подтверждения. Админку можно оставить открытой.</span></div></>}</section></div> : null}
     </>
   );
 }

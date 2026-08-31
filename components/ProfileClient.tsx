@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { CoverArt } from "@/components/CoverArt";
 import { Icon } from "@/components/Icons";
 import { ProfilePortrait } from "@/components/ProfilePortrait";
-import { compactNumber, fullNumber, relativeTime } from "@/lib/format";
+import { compactNumber, relativeTime } from "@/lib/format";
 import type { SessionUser, TastemakerProfile } from "@/types/domain";
 
 function trackEvent(eventName: string, data: Record<string, unknown> = {}) {
@@ -18,7 +18,7 @@ function trackEvent(eventName: string, data: Record<string, unknown> = {}) {
   }).catch(() => undefined);
 }
 
-export function ProfileClient({ initialProfile, session }: { initialProfile: TastemakerProfile; session: SessionUser | null }) {
+export function ProfileClient({ initialProfile, session, ownerView = false }: { initialProfile: TastemakerProfile; session: SessionUser | null; ownerView?: boolean }) {
   const searchParams = useSearchParams();
   const [profile, setProfile] = useState(initialProfile);
   const [authOpen, setAuthOpen] = useState(false);
@@ -81,11 +81,12 @@ export function ProfileClient({ initialProfile, session }: { initialProfile: Tas
       <main className="profilePage">
         <section className="profileHero">
           <div className="portraitStage">
-            <div className="portraitMeta"><span>taste signal</span><b>01—{new Date().getFullYear()}</b></div>
+            <div className="portraitMeta"><span>сигнал вкуса</span><b>01—{new Date().getFullYear()}</b></div>
             <ProfilePortrait name={profile.name} avatarUrl={profile.avatarUrl} />
+            {ownerView && profile.avatarUrl ? <aside className="ownerPhotoTools"><span><Icon name="shield" />Только для владельца</span><a href={`${profile.avatarUrl}${profile.avatarUrl.includes("?") ? "&" : "?"}download=1`}><Icon name="arrow" />Скачать фото</a></aside> : null}
             <div className="nowTape">
               <span className="liveDot" />
-              <div><small>последний сигнал · {relativeTime(profile.events[0]?.observedAt || null)}</small><strong>{profile.events[0]?.track.title}</strong><em>{profile.events[0]?.track.artists.join(", ")}</em></div>
+              <div><small>{profile.events[0] ? `последний сигнал · ${relativeTime(profile.events[0].observedAt)}` : "ждём первое прослушивание"}</small><strong>{profile.events[0]?.track.title || "История скоро появится"}</strong><em>{profile.events[0]?.track.artists.join(", ") || "Taste обновит страницу автоматически"}</em></div>
               <span className="tapeBars" aria-hidden="true">▂▅▃▇▆▂</span>
             </div>
           </div>
@@ -112,20 +113,20 @@ export function ProfileClient({ initialProfile, session }: { initialProfile: Tas
         <section className="profileStats" aria-label="Статистика профиля">
           <div><strong>{compactNumber(profile.followerCount)}</strong><span>следят за вкусом</span></div>
           <div><strong>{profile.events.length}</strong><span>сигналов за 7 дней</span></div>
-          <div><strong>{profile.playlistTrackCount}</strong><span>треков в live-плейлисте</span></div>
+          <div><strong>{profile.playlistTrackCount}</strong><span>треков в живом плейлисте</span></div>
           <button type="button" onClick={share}><Icon name="share" /><span>Поделиться профилем</span></button>
         </section>
 
         {profile.fixture ? (
           <aside className="fixtureNotice">
             <Icon name="spark" />
-            <p><strong>Это честный pilot-preview.</strong> Сейчас здесь тестовые события. После подключения согласованного аккаунта тот же интерфейс показывает реальную историю с заданной задержкой.</p>
+            <p><strong>Это тестовый профиль.</strong> После подключения согласованного аккаунта здесь появится реальная история с выбранной задержкой.</p>
           </aside>
         ) : null}
 
         <section className="listeningSection">
           <header className="sectionHeader">
-            <div><span>01 / live log</span><h2>Недавно слушала</h2></div>
+            <div><span>01 / последние события</span><h2>Последние прослушивания</h2></div>
             <p>Новые разрешённые события появляются здесь автоматически.</p>
           </header>
           <div className="eventList">
@@ -146,7 +147,7 @@ export function ProfileClient({ initialProfile, session }: { initialProfile: Tas
 
         <section className="repeatSection">
           <header className="sectionHeader sectionHeaderLight">
-            <div><span>02 / pattern</span><h2>На повторе</h2></div>
+            <div><span>02 / повторы</span><h2>На повторе</h2></div>
             <p>Наблюдаемые повторы за последние 7 дней — не статистика Яндекса.</p>
           </header>
           <div className="repeatGrid">
@@ -164,7 +165,7 @@ export function ProfileClient({ initialProfile, session }: { initialProfile: Tas
 
         <section className="firstSeenSection">
           <header className="sectionHeader">
-            <div><span>03 / first seen</span><h2>Впервые замечено Taste</h2></div>
+            <div><span>03 / впервые замечено</span><h2>Новое в этой истории</h2></div>
             <p>Это первое появление в нашей истории, а не утверждение о личном «открытии» трека.</p>
           </header>
           <div className="firstSeenList">
@@ -180,11 +181,6 @@ export function ProfileClient({ initialProfile, session }: { initialProfile: Tas
           </div>
         </section>
 
-        <section className="profileCta">
-          <div><span>не пропустить следующий трек</span><h2>Вкус меняется.<br />Следите вживую.</h2></div>
-          <button type="button" onClick={follow}><Icon name="pulse" /> {profile.viewerFollows ? "Вы уже следите" : "Следить за вкусом"}</button>
-          <p>{fullNumber(profile.followerCount)} человек уже следят. Просмотр профиля всегда остаётся открытым.</p>
-        </section>
       </main>
 
       <div className="mobileActions">

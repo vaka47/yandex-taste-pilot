@@ -52,6 +52,7 @@ export type SessionUser = {
   displayName: string;
   avatarUrl: string | null;
   yandexId: string;
+  authContext: "yandex" | "owner_password";
 };
 
 export type AnalyticsSummary = {

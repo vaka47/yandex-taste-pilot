@@ -3,9 +3,9 @@ import { db, ensureSchema } from "@/lib/server/db";
 import { requireRole } from "@/lib/server/session";
 import { sameOrigin } from "@/lib/server/security";
 import { audit } from "@/lib/server/audit";
-import { syncTastemakerHistory, syncTastemakerPlaylist } from "@/lib/server/sync";
+import { syncTastemakerFully, syncTastemakerPlaylist } from "@/lib/server/sync";
 
-const allowed = new Set(["pause", "resume", "publish_enabled", "delay", "hide_event", "restore_event", "hide_artist", "sync_now", "playlist_sync", "disconnect", "delete_request"]);
+const allowed = new Set(["pause", "resume", "publish_enabled", "delay", "sync_interval", "hide_event", "restore_event", "hide_artist", "sync_now", "playlist_sync", "disconnect", "delete_request"]);
 
 export async function POST(request: NextRequest) {
   if (!sameOrigin(request)) return NextResponse.json({ error: "INVALID_ORIGIN" }, { status: 403 });
@@ -29,6 +29,10 @@ export async function POST(request: NextRequest) {
     } else if (body.type === "delay") {
       const delay = body.value === 86400 ? 86400 : 0;
       await db()`update tastemakers set publication_delay_seconds = ${delay}, updated_at = now() where id = ${tastemakerId}`;
+    } else if (body.type === "sync_interval") {
+      const interval = Number(body.value);
+      if (![300, 900, 3600].includes(interval)) return NextResponse.json({ error: "INVALID_SYNC_INTERVAL" }, { status: 400 });
+      await db()`update tastemakers set sync_interval_seconds = ${interval}, updated_at = now() where id = ${tastemakerId}`;
     } else if ((body.type === "hide_event" || body.type === "restore_event") && typeof body.value === "string") {
       await db()`update listening_events set visibility = ${body.type === "hide_event" ? "hidden" : "public"}, hidden_reason = ${body.type === "hide_event" ? "hidden_by_creator" : null} where id::text = ${body.value} and tastemaker_id = ${tastemakerId}`;
     } else if (body.type === "hide_artist" && typeof body.value === "string") {
@@ -40,11 +44,12 @@ export async function POST(request: NextRequest) {
       await db()`update tastemakers set status = 'disconnected', publish_enabled = false, updated_at = now() where id = ${tastemakerId}`;
     } else if (body.type === "sync_now" || body.type === "playlist_sync") {
       operationResult = body.type === "sync_now"
-        ? await syncTastemakerHistory(tastemakerId, true)
+        ? await syncTastemakerFully(tastemakerId, true)
         : await syncTastemakerPlaylist(tastemakerId);
     } else if (body.type === "delete_request") {
       await db()`insert into audit_logs (actor_user_id, action, entity_type, entity_id, metadata) values (${creator.id}, 'data_deletion_requested', 'tastemaker', ${tastemakerId}, ${db().json({ requestedAt: new Date().toISOString() })})`;
     } else return NextResponse.json({ error: "INVALID_ACTION_INPUT" }, { status: 400 });
+    if (["hide_event", "restore_event", "hide_artist", "publish_enabled"].includes(body.type)) operationResult = await syncTastemakerPlaylist(tastemakerId);
     await audit(creator.id, `creator_${body.type}`, "tastemaker", tastemakerId, { value: typeof body.value === "string" || typeof body.value === "number" || typeof body.value === "boolean" ? body.value : undefined });
     return NextResponse.json({ ok: true, result: operationResult });
   } catch {

@@ -6,11 +6,18 @@ export type AdminTastemakerRow = {
   id: string;
   slug: string;
   name: string;
+  avatarUrl: string | null;
   status: TastemakerStatus;
   followerCount: number;
-  visitors7d: number;
+  profileViews7d: number;
+  uniqueVisitors7d: number;
+  followClicks7d: number;
+  follows7d: number;
   trackOpens7d: number;
+  playlistOpens7d: number;
+  shares7d: number;
   lastSyncAt: string | null;
+  playlistUrl: string | null;
   playlistStatus: "healthy" | "paused" | "error" | "not_created";
   connectionStatus: "connected" | "pending" | "error" | "disconnected" | "not_connected";
 };
@@ -33,10 +40,12 @@ export type CreatorDashboardData = {
   slug: string;
   name: string;
   roleLine: string;
+  bio: string;
   avatarUrl: string | null;
   status: TastemakerStatus;
   publishEnabled: boolean;
   publicationDelaySeconds: number;
+  syncIntervalSeconds: number;
   followerCount: number;
   profileViews7d: number;
   uniqueVisitors7d: number;
@@ -108,14 +117,29 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
   await ensureSchema();
   const [makers, analytics, failures, audits, serviceConnections] = await Promise.all([
     db()`
-      select t.id, t.slug, t.name, t.status,
+      select t.id, t.slug, t.name, t.avatar_url, t.status,
         count(distinct f.id) filter (where f.unfollowed_at is null)::int as follower_count,
+        count(distinct a.id) filter (
+          where a.event_name = 'tastemaker_profile_view' and a.created_at >= now() - interval '7 days'
+        )::int as profile_views_7d,
         count(distinct coalesce(a.user_id::text, a.anonymous_id)) filter (
           where a.event_name = 'tastemaker_profile_view' and a.created_at >= now() - interval '7 days'
-        )::int as visitors_7d,
+        )::int as unique_visitors_7d,
+        count(distinct a.id) filter (
+          where a.event_name = 'follow_click' and a.created_at >= now() - interval '7 days'
+        )::int as follow_clicks_7d,
+        count(distinct a.id) filter (
+          where a.event_name = 'follow_completed' and a.created_at >= now() - interval '7 days'
+        )::int as follows_7d,
         count(distinct a.id) filter (
           where a.event_name = 'track_open_click' and a.created_at >= now() - interval '7 days'
         )::int as track_opens_7d,
+        count(distinct a.id) filter (
+          where a.event_name = 'playlist_open_click' and a.created_at >= now() - interval '7 days'
+        )::int as playlist_opens_7d,
+        count(distinct a.id) filter (
+          where a.event_name = 'share_click' and a.created_at >= now() - interval '7 days'
+        )::int as shares_7d,
         max(s.finished_at) filter (where s.status = 'success') as last_sync_at,
         mc.status as connection_status, p.public_url, p.last_error as playlist_error
       from tastemakers t
@@ -138,7 +162,7 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
         count(*) filter (where event_name = 'playlist_open_click')::int as playlist_opens_7d
       from analytics_events where created_at >= now() - interval '7 days'
     `,
-    db()`select count(*)::int as count from sync_logs where status = 'error' and started_at >= now() - interval '24 hours'`,
+    db()`select count(*)::int as count from sync_logs where status = 'failed' and started_at >= now() - interval '24 hours'`,
     db()`
       select al.id, al.action, al.created_at, t.name as entity_name
       from audit_logs al left join tastemakers t on t.id::text = al.entity_id
@@ -150,9 +174,10 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
   const serviceAccountId = serviceConnection?.provider_account_id ? String(serviceConnection.provider_account_id) : null;
   return {
     tastemakers: makers.map(row => ({
-      id: String(row.id), slug: String(row.slug), name: String(row.name), status: row.status,
-      followerCount: Number(row.follower_count || 0), visitors7d: Number(row.visitors_7d || 0),
-      trackOpens7d: Number(row.track_opens_7d || 0), lastSyncAt: iso(row.last_sync_at),
+      id: String(row.id), slug: String(row.slug), name: String(row.name), avatarUrl: row.avatar_url ? String(row.avatar_url) : null, status: row.status,
+      followerCount: Number(row.follower_count || 0), profileViews7d: Number(row.profile_views_7d || 0), uniqueVisitors7d: Number(row.unique_visitors_7d || 0),
+      followClicks7d: Number(row.follow_clicks_7d || 0), follows7d: Number(row.follows_7d || 0), trackOpens7d: Number(row.track_opens_7d || 0),
+      playlistOpens7d: Number(row.playlist_opens_7d || 0), shares7d: Number(row.shares_7d || 0), lastSyncAt: iso(row.last_sync_at), playlistUrl: row.public_url ? String(row.public_url) : null,
       playlistStatus: row.status === "paused" ? "paused" : row.playlist_error ? "error" : row.public_url ? "healthy" : "not_created",
       connectionStatus: row.connection_status || "not_connected"
     })),
@@ -207,10 +232,10 @@ export async function getCreatorDashboardData(userId: string, role: Role): Promi
   ]);
   const accountId = maker.provider_account_id ? String(maker.provider_account_id) : null;
   return {
-    id: String(maker.id), slug: String(maker.slug), name: String(maker.name), roleLine: String(maker.role_line),
+    id: String(maker.id), slug: String(maker.slug), name: String(maker.name), roleLine: String(maker.role_line), bio: String(maker.bio || ""),
     avatarUrl: maker.avatar_url ? String(maker.avatar_url) : null,
     status: maker.status, publishEnabled: Boolean(maker.publish_enabled),
-    publicationDelaySeconds: Number(maker.publication_delay_seconds || 0), followerCount: Number(maker.follower_count || 0),
+    publicationDelaySeconds: Number(maker.publication_delay_seconds || 0), syncIntervalSeconds: Number(maker.sync_interval_seconds || 300), followerCount: Number(maker.follower_count || 0),
     profileViews7d: Number(analytics[0]?.profile_views_7d || 0), uniqueVisitors7d: Number(analytics[0]?.unique_visitors_7d || 0),
     trackOpens7d: Number(analytics[0]?.track_opens_7d || 0),
     connection: {

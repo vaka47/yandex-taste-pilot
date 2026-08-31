@@ -4,6 +4,7 @@ import { decryptSecret, encryptSecret } from "@/lib/server/crypto";
 import { db, ensureSchema } from "@/lib/server/db";
 import { requireRole } from "@/lib/server/session";
 import { audit } from "@/lib/server/audit";
+import { syncTastemakerFully } from "@/lib/server/sync";
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   let creator;
@@ -34,6 +35,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       await sql`insert into sync_logs (tastemaker_id, job_type, status, stats) values (${challenge.tastemaker_id}, 'first_history_sync', 'queued', '{}'::jsonb)`;
     });
     await audit(creator.id, "connector_connected", "tastemaker", challenge.tastemaker_id, { providerAccountId: result.account?.id || null });
+    await syncTastemakerFully(String(challenge.tastemaker_id), true);
     return NextResponse.json({ status: "connected", account: result.account || null });
   } catch (error) {
     const code = error instanceof Error ? error.message.slice(0, 80) : "UNKNOWN_PROVIDER_ERROR";
@@ -41,4 +43,3 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     return NextResponse.json({ error: code }, { status: 502 });
   }
 }
-

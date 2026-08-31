@@ -40,8 +40,8 @@ export async function syncTastemakerHistory(tastemakerId: string, force = false)
       and mc.status = 'connected' and mc.encrypted_access_token is not null
       and t.status = 'active' and t.publish_enabled = true
       and (mc.sync_locked_until is null or mc.sync_locked_until < now())
-      and (${force} or mc.last_success_at is null or mc.last_success_at < now() - interval '4 minutes')
-    returning mc.encrypted_access_token, t.publication_delay_seconds
+      and (${force} or mc.last_success_at is null or mc.last_success_at < now() - make_interval(secs => greatest(t.sync_interval_seconds - 30, 60)))
+    returning mc.encrypted_access_token, t.publication_delay_seconds, t.sync_interval_seconds
   `;
   if (!lease[0]) return { ok: true, skipped: true, inserted: 0, fetched: 0 };
   const logRows = await db()`insert into sync_logs (tastemaker_id, job_type, status, stats) values (${tastemakerId}, 'sync_music_history', 'running', '{}'::jsonb) returning id`;
@@ -75,7 +75,6 @@ export async function syncTastemakerHistory(tastemakerId: string, force = false)
     }
     await db()`update music_connections set last_success_at = now(), last_error_at = null, last_error_code = null, sync_locked_until = null, updated_at = now() where tastemaker_id = ${tastemakerId}`;
     await db()`update sync_logs set status = 'success', finished_at = now(), stats = ${db().json({ fetched: result.events.length, inserted })} where id = ${logId}`;
-    if (inserted) await db()`insert into sync_logs (tastemaker_id, job_type, status, stats) values (${tastemakerId}, 'sync_live_playlist', 'queued', ${db().json({ reason: "new_events", inserted })})`;
     return { ok: true, skipped: false, fetched: result.events.length, inserted };
   } catch (error) {
     const code = normalizedError(error, "HISTORY_FETCH_FAILED");
@@ -121,7 +120,7 @@ export async function syncTastemakerPlaylist(tastemakerId: string) {
   const logRows = await db()`insert into sync_logs (tastemaker_id, job_type, status, stats) values (${tastemakerId}, 'sync_live_playlist', 'running', ${db().json({ desired: desired.length })}) returning id`;
   try {
     const result = await connectorRequest<{ uid: string; kind: string; revision: number; trackCount: number; operations: number; publicUrl: string }>("/internal/yandex-music/playlist/sync", {
-      token, uid: maker.provider_uid, kind: maker.provider_kind, title: `Вкус ${maker.name} — live`, tracks: desired
+      token, uid: maker.provider_uid, kind: maker.provider_kind, title: `Вкус ${maker.name} — живой`, tracks: desired
     });
     await db()`
       insert into playlists (tastemaker_id, provider_uid, provider_kind, public_url, revision, max_tracks, last_sync_at, last_error)
@@ -136,6 +135,13 @@ export async function syncTastemakerPlaylist(tastemakerId: string) {
     await db()`update sync_logs set status = 'failed', finished_at = now(), error_code = ${code}, error_message = ${code} where id = ${logRows[0].id}`;
     return { ok: false, skipped: false, error: code };
   }
+}
+
+export async function syncTastemakerFully(tastemakerId: string, force = false) {
+  const history = await syncTastemakerHistory(tastemakerId, force);
+  if (!history.ok || history.skipped) return { ok: history.ok, history, playlist: null };
+  const playlist = await syncTastemakerPlaylist(tastemakerId);
+  return { ok: history.ok && playlist.ok, history, playlist };
 }
 
 export async function connectedTastemakerIds() {

@@ -1,5 +1,5 @@
 import "server-only";
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 
 function encryptionKey() {
   const source = process.env.TOKEN_ENCRYPTION_KEY || process.env.SESSION_SECRET;
@@ -13,6 +13,18 @@ export function randomToken(bytes = 32) {
 
 export function hashToken(value: string) {
   return createHash("sha256").update(value).digest("hex");
+}
+
+export function verifyPassword(value: string, encoded: string) {
+  const [algorithm, saltValue, digestValue] = encoded.split("$");
+  if (algorithm !== "scrypt" || !saltValue || !digestValue) return false;
+  try {
+    const expected = Buffer.from(digestValue, "base64url");
+    const actual = scryptSync(value, Buffer.from(saltValue, "base64url"), expected.length);
+    return actual.length === expected.length && timingSafeEqual(actual, expected);
+  } catch {
+    return false;
+  }
 }
 
 export function encryptSecret(value: string) {
@@ -34,4 +46,3 @@ export function decryptSecret(payload: string) {
 export function pkceChallenge(verifier: string) {
   return createHash("sha256").update(verifier).digest("base64url");
 }
-

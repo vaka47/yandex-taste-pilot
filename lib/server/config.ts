@@ -5,6 +5,7 @@ export const yandexRedirectUri = () => process.env.YANDEX_ID_REDIRECT_URI || `${
 export const isDatabaseConfigured = () => Boolean(process.env.DATABASE_URL || process.env.POSTGRES_URL);
 export const isYandexIdConfigured = () => Boolean(process.env.YANDEX_ID_CLIENT_ID && process.env.YANDEX_ID_CLIENT_SECRET);
 export const isConnectorConfigured = () => process.env.MUSIC_CONNECTOR_ENABLED === "true" && Boolean(process.env.MUSIC_CONNECTOR_INTERNAL_URL && process.env.MUSIC_CONNECTOR_INTERNAL_SECRET);
+export const isOwnerLoginConfigured = () => Boolean(process.env.ADMIN_LOGIN_USERNAME && process.env.ADMIN_LOGIN_PASSWORD_HASH);
 
 export function featureFlag(name: string, defaultValue = false) {
   const value = process.env[name];

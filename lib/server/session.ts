@@ -8,11 +8,11 @@ import type { SessionUser } from "@/types/domain";
 const COOKIE = "taste_session";
 const SESSION_DAYS = 14;
 
-export async function createSession(userId: string) {
+export async function createSession(userId: string, authContext: "yandex" | "owner_password" = "yandex") {
   await ensureSchema();
   const token = randomToken();
   const expiresAt = new Date(Date.now() + SESSION_DAYS * 86_400_000);
-  await db()`insert into sessions (token_hash, user_id, expires_at) values (${hashToken(token)}, ${userId}, ${expiresAt})`;
+  await db()`insert into sessions (token_hash, user_id, expires_at, auth_context) values (${hashToken(token)}, ${userId}, ${expiresAt}, ${authContext})`;
   const store = await cookies();
   store.set(COOKIE, token, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", expires: expiresAt });
 }
@@ -33,7 +33,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   if (!token) return null;
   await ensureSchema();
   const rows = await db()`
-    select u.id, u.role, u.display_name, u.avatar_url, ai.provider_user_id as yandex_id
+    select u.id, u.role, u.display_name, u.avatar_url, ai.provider_user_id as yandex_id, s.auth_context
     from sessions s
     join users u on u.id = s.user_id and u.is_active = true
     join auth_identities ai on ai.user_id = u.id and ai.provider = 'yandex_id'
@@ -42,7 +42,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   `;
   const row = rows[0];
   if (!row) return null;
-  return { id: row.id, role: row.role, displayName: row.display_name, avatarUrl: row.avatar_url, yandexId: row.yandex_id } as SessionUser;
+  return { id: row.id, role: row.role, displayName: row.display_name, avatarUrl: row.avatar_url, yandexId: row.yandex_id, authContext: row.auth_context } as SessionUser;
 }
 
 export async function requireUser() {
@@ -53,7 +53,7 @@ export async function requireUser() {
 
 export async function requireRole(role: "creator" | "admin") {
   const user = await requireUser();
-  if (role === "admin" && (user.role !== "admin" || !isAdminYandexId(user.yandexId))) throw new Error("FORBIDDEN");
+  if (role === "admin" && (user.role !== "admin" || user.authContext !== "owner_password" || !isAdminYandexId(user.yandexId))) throw new Error("FORBIDDEN");
   if (role === "creator" && !["creator", "admin"].includes(user.role)) throw new Error("FORBIDDEN");
   return user;
 }
