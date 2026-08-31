@@ -21,6 +21,7 @@ export type ListeningEvent = {
   visibility: EventVisibility;
   hiddenReason: string | null;
   playCount7d: number;
+  consecutiveCount: number;
   firstSeenAt: string;
 };
 
@@ -63,4 +64,3 @@ export type AnalyticsSummary = {
   d1Retention: number;
   d7Retention: number;
 };
-

@@ -121,7 +121,7 @@ export async function syncTastemakerPlaylist(tastemakerId: string) {
   const logRows = await db()`insert into sync_logs (tastemaker_id, job_type, status, stats) values (${tastemakerId}, 'sync_live_playlist', 'running', ${db().json({ desired: desired.length })}) returning id`;
   try {
     const result = await connectorRequest<{ uid: string; kind: string; revision: number; trackCount: number; operations: number; publicUrl: string }>("/internal/yandex-music/playlist/sync", {
-      token, uid: maker.provider_uid, kind: maker.provider_kind, title: `Что слушает ${maker.name}`, tracks: desired
+      token, uid: maker.provider_uid, kind: maker.provider_kind, title: `Вкус ${maker.name} — live`, tracks: desired
     });
     await db()`
       insert into playlists (tastemaker_id, provider_uid, provider_kind, public_url, revision, max_tracks, last_sync_at, last_error)

@@ -85,6 +85,7 @@ function eventFromRow(row: Record<string, any>): ListeningEvent {
     visibility: row.visibility,
     hiddenReason: row.hidden_reason ? String(row.hidden_reason) : null,
     playCount7d: Number(row.play_count_7d || 1),
+    consecutiveCount: Number(row.consecutive_count || 1),
     firstSeenAt: iso(row.first_seen_at) || iso(row.fetched_at) || new Date(0).toISOString()
   };
 }

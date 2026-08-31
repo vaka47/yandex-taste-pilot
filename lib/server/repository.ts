@@ -21,8 +21,23 @@ function rowToEvent(row: Record<string, any>): ListeningEvent {
     visibility: row.visibility,
     hiddenReason: row.hidden_reason,
     playCount7d: Number(row.play_count_7d || 1),
+    consecutiveCount: Number(row.consecutive_count || 1),
     firstSeenAt: row.first_seen_at?.toISOString?.() || row.first_seen_at || row.fetched_at?.toISOString?.() || row.fetched_at
   };
+}
+
+function publicEventsFromRows(rows: Array<Record<string, any>>) {
+  const maxStreakByTrack = new Map<string, number>();
+  let start = 0;
+  while (start < rows.length) {
+    const trackId = String(rows[start].track_provider_id);
+    const day = rows[start].raw_metadata?.observedDate || null;
+    let end = start + 1;
+    while (end < rows.length && String(rows[end].track_provider_id) === trackId && day && rows[end].raw_metadata?.observedDate === day) end += 1;
+    maxStreakByTrack.set(trackId, Math.max(maxStreakByTrack.get(trackId) || 1, end - start));
+    start = end;
+  }
+  return rows.map(row => rowToEvent({ ...row, consecutive_count: maxStreakByTrack.get(String(row.track_provider_id)) || 1 }));
 }
 
 export async function getPublicProfile(slug: string, viewerId: string | null): Promise<TastemakerProfile | null> {
@@ -50,14 +65,35 @@ export async function getPublicProfile(slug: string, viewerId: string | null): P
   if (!row) return null;
   const events = await db()`
     select e.*,
-      count(*) over (partition by e.track_provider_id)::int as play_count_7d,
-      min(e.observed_at) over (partition by e.track_provider_id) as first_seen_at
+      count(*) filter (where coalesce(
+        e.observed_at,
+        case when coalesce(e.raw_metadata->>'observedDate', '') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then (e.raw_metadata->>'observedDate')::date::timestamptz end,
+        e.fetched_at
+      ) >= now() - interval '7 days') over (partition by e.track_provider_id)::int as play_count_7d,
+      (select min(coalesce(
+        fe.observed_at,
+        case when coalesce(fe.raw_metadata->>'observedDate', '') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then (fe.raw_metadata->>'observedDate')::date::timestamptz end,
+        fe.fetched_at
+      )) from listening_events fe
+        where fe.tastemaker_id = e.tastemaker_id and fe.track_provider_id = e.track_provider_id
+          and fe.visibility = 'public' and fe.publish_at <= now()
+      ) as first_seen_at
     from listening_events e
     where e.tastemaker_id = ${row.id}
       and e.visibility = 'public'
       and e.publish_at <= now()
-      and (e.observed_at is null or e.observed_at > now() - interval '30 days')
-    order by coalesce(e.observed_at, e.fetched_at) desc
+      and coalesce(
+        e.observed_at,
+        case when coalesce(e.raw_metadata->>'observedDate', '') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then (e.raw_metadata->>'observedDate')::date::timestamptz end,
+        e.fetched_at
+      ) > now() - interval '30 days'
+    order by
+      coalesce(
+        e.observed_at,
+        case when coalesce(e.raw_metadata->>'observedDate', '') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then (e.raw_metadata->>'observedDate')::date::timestamptz end,
+        e.fetched_at
+      ) desc,
+      case when coalesce(e.raw_metadata->>'providerPosition', '') ~ '^[0-9]+$' then (e.raw_metadata->>'providerPosition')::int end asc nulls last
     limit 80
   `;
   return {
@@ -67,7 +103,7 @@ export async function getPublicProfile(slug: string, viewerId: string | null): P
     followerCount: Number(row.follower_count), playlistUrl: row.playlist_url,
     playlistTrackCount: Number(row.playlist_track_count || 0),
     lastSyncAt: row.last_sync_at?.toISOString?.() || row.last_sync_at || null,
-    viewerFollows: Boolean(row.viewer_follows), fixture: Boolean(row.fixture), events: events.map(rowToEvent)
+    viewerFollows: Boolean(row.viewer_follows), fixture: Boolean(row.fixture), events: publicEventsFromRows(events)
   } as TastemakerProfile;
 }
 
