@@ -32,7 +32,11 @@ export async function getPublicProfile(slug: string, viewerId: string | null): P
     select t.*,
       count(f.id) filter (where f.unfollowed_at is null)::int as follower_count,
       p.public_url as playlist_url,
-      p.max_tracks as playlist_track_count,
+      (
+        select least(count(distinct pe.track_provider_id)::int, coalesce(p.max_tracks, 50))
+        from listening_events pe
+        where pe.tastemaker_id = t.id and pe.visibility = 'public' and pe.publish_at <= now()
+      ) as playlist_track_count,
       p.last_sync_at,
       exists(select 1 from follows vf where vf.tastemaker_id = t.id and vf.user_id = ${viewerId} and vf.unfollowed_at is null) as viewer_follows
     from tastemakers t
@@ -43,7 +47,7 @@ export async function getPublicProfile(slug: string, viewerId: string | null): P
     limit 1
   `;
   const row = profileRows[0];
-  if (!row) return [fixtureProfile.slug, "demo", "lera"].includes(slug) ? { ...fixtureProfile } : null;
+  if (!row) return null;
   const events = await db()`
     select e.*,
       count(*) over (partition by e.track_provider_id)::int as play_count_7d,
@@ -61,10 +65,22 @@ export async function getPublicProfile(slug: string, viewerId: string | null): P
     avatarUrl: row.avatar_url, verified: row.verified, status: row.status, isPublic: row.is_public,
     publishEnabled: row.publish_enabled, publicationDelaySeconds: row.publication_delay_seconds,
     followerCount: Number(row.follower_count), playlistUrl: row.playlist_url,
-    playlistTrackCount: Number(row.playlist_track_count || 50),
+    playlistTrackCount: Number(row.playlist_track_count || 0),
     lastSyncAt: row.last_sync_at?.toISOString?.() || row.last_sync_at || null,
     viewerFollows: Boolean(row.viewer_follows), fixture: Boolean(row.fixture), events: events.map(rowToEvent)
   } as TastemakerProfile;
+}
+
+export async function getFeaturedPublicProfile(viewerId: string | null): Promise<TastemakerProfile | null> {
+  if (!isDatabaseConfigured()) return { ...fixtureProfile };
+  await ensureSchema();
+  const rows = await db()`
+    select slug from tastemakers
+    where is_public = true and status <> 'archived'
+    order by (status = 'active') desc, verified desc, updated_at desc
+    limit 1
+  `;
+  return rows[0]?.slug ? getPublicProfile(String(rows[0].slug), viewerId) : null;
 }
 
 export async function getPublicEvent(eventId: string) {

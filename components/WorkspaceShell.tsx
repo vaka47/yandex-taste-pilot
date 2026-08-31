@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Brand } from "@/components/Brand";
 import { Icon } from "@/components/Icons";
 
-export function WorkspaceShell({ area, preview, profileHref = "/t/lera-sever", children }: { area: "admin" | "creator"; preview?: boolean; profileHref?: string; children: React.ReactNode }) {
+export function WorkspaceShell({ area, preview, profileHref = "/", children }: { area: "admin" | "creator"; preview?: boolean; profileHref?: string; children: React.ReactNode }) {
   const admin = area === "admin";
   return (
     <div className={`workspace ${admin ? "adminWorkspace" : "creatorWorkspace"}`}>
