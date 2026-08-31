@@ -14,7 +14,7 @@ Production-oriented pilot for following the real, opt-in listening history of ta
 - isolated FastAPI connector pinned to `yandex-music==3.0.0`;
 - non-blocking Device Flow challenge/polling; music tokens never reach browser storage;
 - real history import, privacy filtering, stable deduplication and 0/24h publication delay;
-- stable latest-50 unique playlist sync through a dedicated service account;
+- stable latest-50 unique playlist sync through a dedicated service account, connected from the protected admin UI;
 - cron leases, normalized provider errors and per-tastemaker failure isolation;
 - responsive public, admin and creator interfaces, reduced-motion support and visible keyboard focus;
 - fixture mode for safe demos before accounts/secrets are connected.
@@ -63,7 +63,7 @@ Provision PostgreSQL, run `npm run migrate`, register an official Yandex OAuth a
 https://YOUR_DOMAIN/auth/yandex/callback
 ```
 
-The service-account Yandex Music token must belong to a dedicated pilot account—not a founder's personal account. Prefer `SERVICE_YANDEX_MUSIC_TOKEN_ENCRYPTED`.
+The service-account Yandex Music token must belong to a dedicated pilot account—not a founder's personal account and not a creator's account. Connect it in **Admin → Система → Подключить сервис**. The token is encrypted before it reaches PostgreSQL and is never stored in browser state. The encrypted/plain environment variables remain a break-glass fallback for existing installations.
 
 On Vercel Hobby, the 5/15-minute scheduler runs through the two protected GitHub Actions workflows in `.github/workflows/`. Configure identical `CRON_SECRET` values in GitHub Actions and the web project, and set the GitHub `APP_URL` secret to the production origin. Vercel Pro may instead use native Cron Jobs.
 
@@ -73,7 +73,7 @@ On Vercel Hobby, the 5/15-minute scheduler runs through the two protected GitHub
 - Yandex ID app client ID/secret and callback;
 - first admin Yandex ID in `ADMIN_YANDEX_IDS`;
 - deployed connector + shared internal secret;
-- dedicated Yandex Music service account token;
+- dedicated Yandex Music service account authorized in the protected admin UI;
 - a disposable/test tastemaker Yandex Music account;
 - production privacy/deletion email and approved creator consent copy.
 

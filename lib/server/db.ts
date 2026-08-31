@@ -129,6 +129,36 @@ async function createSchema() {
     )
   `;
   await sql`
+    create table if not exists service_music_connections (
+      singleton_id smallint primary key default 1 check (singleton_id = 1),
+      provider text not null default 'yandex_music_unofficial',
+      provider_account_id text,
+      provider_login text,
+      encrypted_access_token text,
+      encrypted_refresh_token text,
+      token_expires_at timestamptz,
+      status text not null default 'pending' check (status in ('pending','connected','error','disconnected')),
+      connected_at timestamptz,
+      last_error_at timestamptz,
+      last_error_code text,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    )
+  `;
+  await sql`
+    create table if not exists service_connection_challenges (
+      id uuid primary key default gen_random_uuid(),
+      encrypted_device_code text not null,
+      user_code text not null,
+      verification_url text not null,
+      poll_interval_seconds integer not null default 5,
+      expires_at timestamptz not null,
+      completed_at timestamptz,
+      created_by uuid references users(id) on delete set null,
+      created_at timestamptz not null default now()
+    )
+  `;
+  await sql`
     create table if not exists listening_events (
       id uuid primary key default gen_random_uuid(),
       tastemaker_id uuid not null references tastemakers(id) on delete cascade,
@@ -266,4 +296,3 @@ export async function ensureSchema() {
   }
   return global.yandexTasteSchema;
 }
-

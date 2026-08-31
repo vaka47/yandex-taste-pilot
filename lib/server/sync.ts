@@ -85,7 +85,9 @@ export async function syncTastemakerHistory(tastemakerId: string, force = false)
   }
 }
 
-function serviceMusicToken() {
+async function serviceMusicToken() {
+  const rows = await db()`select encrypted_access_token from service_music_connections where singleton_id = 1 and status = 'connected' limit 1`;
+  if (rows[0]?.encrypted_access_token) return decryptSecret(rows[0].encrypted_access_token);
   if (process.env.SERVICE_YANDEX_MUSIC_TOKEN_ENCRYPTED) return decryptSecret(process.env.SERVICE_YANDEX_MUSIC_TOKEN_ENCRYPTED);
   return process.env.SERVICE_YANDEX_MUSIC_TOKEN || null;
 }
@@ -93,7 +95,7 @@ function serviceMusicToken() {
 export async function syncTastemakerPlaylist(tastemakerId: string) {
   await ensureSchema();
   if (process.env.PLAYLIST_SYNC_ENABLED !== "true") return { ok: true, skipped: true, reason: "disabled" };
-  const token = serviceMusicToken();
+  const token = await serviceMusicToken();
   if (!token) return { ok: false, skipped: true, reason: "service_token_missing" };
   const makerRows = await db()`
     select t.name, t.status, t.publish_enabled, p.provider_uid, p.provider_kind, p.max_tracks
@@ -141,4 +143,3 @@ export async function connectedTastemakerIds() {
   const rows = await db()`select t.id from tastemakers t join music_connections mc on mc.tastemaker_id = t.id where t.status = 'active' and t.publish_enabled = true and mc.status = 'connected' order by t.id`;
   return rows.map(row => row.id as string);
 }
-

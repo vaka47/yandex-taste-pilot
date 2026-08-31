@@ -20,6 +20,12 @@ export type AdminDashboardData = {
   metrics: AnalyticsSummary;
   syncErrors: number;
   recentAudits: Array<{ id: string; action: string; entityName: string | null; createdAt: string }>;
+  serviceConnection: {
+    status: "connected" | "pending" | "error" | "disconnected" | "not_connected";
+    login: string | null;
+    accountIdSuffix: string | null;
+    errorCode: string | null;
+  };
 };
 
 export type CreatorDashboardData = {
@@ -98,7 +104,7 @@ function analyticsFromRow(row: Record<string, any> | undefined): AnalyticsSummar
 
 export async function getAdminDashboardData(): Promise<AdminDashboardData> {
   await ensureSchema();
-  const [makers, analytics, failures, audits] = await Promise.all([
+  const [makers, analytics, failures, audits, serviceConnections] = await Promise.all([
     db()`
       select t.id, t.slug, t.name, t.status,
         count(distinct f.id) filter (where f.unfollowed_at is null)::int as follower_count,
@@ -135,8 +141,11 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
       select al.id, al.action, al.created_at, t.name as entity_name
       from audit_logs al left join tastemakers t on t.id::text = al.entity_id
       order by al.created_at desc limit 8
-    `
+    `,
+    db()`select status, provider_account_id, provider_login, last_error_code from service_music_connections where singleton_id = 1 limit 1`
   ]);
+  const serviceConnection = serviceConnections[0];
+  const serviceAccountId = serviceConnection?.provider_account_id ? String(serviceConnection.provider_account_id) : null;
   return {
     tastemakers: makers.map(row => ({
       id: String(row.id), slug: String(row.slug), name: String(row.name), status: row.status,
@@ -147,7 +156,13 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
     })),
     metrics: analyticsFromRow(analytics[0]),
     syncErrors: Number(failures[0]?.count || 0),
-    recentAudits: audits.map(row => ({ id: String(row.id), action: String(row.action), entityName: row.entity_name ? String(row.entity_name) : null, createdAt: iso(row.created_at)! }))
+    recentAudits: audits.map(row => ({ id: String(row.id), action: String(row.action), entityName: row.entity_name ? String(row.entity_name) : null, createdAt: iso(row.created_at)! })),
+    serviceConnection: {
+      status: serviceConnection?.status || "not_connected",
+      login: serviceConnection?.provider_login ? String(serviceConnection.provider_login) : null,
+      accountIdSuffix: serviceAccountId ? serviceAccountId.slice(-4) : null,
+      errorCode: serviceConnection?.last_error_code ? String(serviceConnection.last_error_code) : null
+    }
   };
 }
 
