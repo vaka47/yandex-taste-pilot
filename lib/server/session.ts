@@ -2,6 +2,7 @@ import "server-only";
 import { cookies } from "next/headers";
 import { db, ensureSchema, isDatabaseConfigured } from "@/lib/server/db";
 import { hashToken, randomToken } from "@/lib/server/crypto";
+import { isAdminYandexId } from "@/lib/server/config";
 import type { SessionUser } from "@/types/domain";
 
 const COOKIE = "taste_session";
@@ -52,8 +53,7 @@ export async function requireUser() {
 
 export async function requireRole(role: "creator" | "admin") {
   const user = await requireUser();
-  if (role === "admin" && user.role !== "admin") throw new Error("FORBIDDEN");
+  if (role === "admin" && (user.role !== "admin" || !isAdminYandexId(user.yandexId))) throw new Error("FORBIDDEN");
   if (role === "creator" && !["creator", "admin"].includes(user.role)) throw new Error("FORBIDDEN");
   return user;
 }
-

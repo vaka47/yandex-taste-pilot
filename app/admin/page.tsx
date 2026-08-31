@@ -2,16 +2,16 @@ import Link from "next/link";
 import { AdminDashboardClient } from "@/components/AdminDashboardClient";
 import { WorkspaceShell } from "@/components/WorkspaceShell";
 import { getAdminDashboardData } from "@/lib/server/dashboard";
+import { isAdminYandexId } from "@/lib/server/config";
 import { getSessionUser } from "@/lib/server/session";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Админка" };
 
-export default async function AdminPage({ searchParams }: { searchParams: Promise<{ preview?: string }> }) {
-  const preview = (await searchParams).preview === "1";
+export default async function AdminPage() {
   const user = await getSessionUser();
-  if ((!user || user.role !== "admin") && !preview) return <main className="authGate"><span>admin / protected</span><h1>Войдите как администратор пилота</h1><p>Одного Yandex ID недостаточно: сервер дополнительно проверит роль admin в базе.</p><Link href="/auth/yandex/start?returnTo=/admin">Продолжить с Яндекс ID</Link><Link className="previewLink" href="/admin?preview=1">Посмотреть безопасный preview</Link></main>;
-  const isPreview = !user || user.role !== "admin";
-  const data = isPreview ? null : await getAdminDashboardData();
-  return <WorkspaceShell area="admin" preview={isPreview} profileHref={data?.tastemakers[0] ? `/t/${data.tastemakers[0].slug}` : "/"}><AdminDashboardClient preview={isPreview} initialData={data} /></WorkspaceShell>;
+  const allowed = Boolean(user && user.role === "admin" && isAdminYandexId(user.yandexId));
+  if (!allowed) return <main className="authGate"><span>admin / one owner</span><h1>{user ? "У этого ID нет доступа" : "Вход только для владельца"}</h1><p>{user ? "Админка закреплена за единственным Yandex ID владельца. Другие аккаунты не получают доступ, даже если у них сохранилась старая роль в базе." : "Сервер сверит Yandex ID с единственным идентификатором владельца в защищённом allowlist."}</p><Link href={user ? "/auth/logout" : "/auth/yandex/start?returnTo=/admin"}>{user ? "Сменить Yandex ID" : "Войти как владелец"}</Link></main>;
+  const data = await getAdminDashboardData();
+  return <WorkspaceShell area="admin" profileHref={data?.tastemakers[0] ? `/t/${data.tastemakers[0].slug}` : "/"}><AdminDashboardClient preview={false} initialData={data} /></WorkspaceShell>;
 }

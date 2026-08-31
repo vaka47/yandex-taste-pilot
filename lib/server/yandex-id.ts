@@ -1,5 +1,5 @@
 import "server-only";
-import { adminYandexIds, yandexRedirectUri } from "@/lib/server/config";
+import { isAdminYandexId, yandexRedirectUri } from "@/lib/server/config";
 import { db, ensureSchema } from "@/lib/server/db";
 
 type TokenResponse = { access_token?: string; token_type?: string; expires_in?: number; error?: string; error_description?: string };
@@ -50,7 +50,7 @@ export async function upsertYandexUser(profile: YandexProfile) {
   const avatarUrl = profile.default_avatar_id && !profile.is_avatar_empty
     ? `https://avatars.yandex.net/get-yapic/${profile.default_avatar_id}/islands-200`
     : null;
-  const bootstrapAdmin = adminYandexIds().has(profile.id);
+  const bootstrapAdmin = isAdminYandexId(profile.id);
   const rows = await db().begin(async sql => {
     const existing = await sql`
       select u.id, u.role from auth_identities ai join users u on u.id = ai.user_id
@@ -68,4 +68,3 @@ export async function upsertYandexUser(profile: YandexProfile) {
   });
   return { id: rows[0].id as string, role: rows[0].role as string, displayName, yandexId: profile.id };
 }
-

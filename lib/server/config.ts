@@ -16,3 +16,11 @@ export function adminYandexIds() {
   return new Set((process.env.ADMIN_YANDEX_IDS || "").split(",").map(value => value.trim()).filter(Boolean));
 }
 
+export function hasSingleAdminConfigured() {
+  return adminYandexIds().size === 1;
+}
+
+export function isAdminYandexId(yandexId: string) {
+  const ids = adminYandexIds();
+  return ids.size === 1 && ids.has(yandexId);
+}

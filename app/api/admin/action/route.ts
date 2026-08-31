@@ -33,9 +33,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, id: created[0].id, inviteUrl: `${appUrl()}/invite/${rawToken}` }, { status: 201 });
     }
     if (body.type === "create_invite" && body.tastemakerId) {
+      const tastemakerId = body.tastemakerId;
       const rawToken = randomToken(32);
-      await db()`insert into creator_invites (tastemaker_id, token_hash, expires_at, created_by) values (${body.tastemakerId}, ${hashToken(rawToken)}, now() + interval '7 days', ${admin.id})`;
-      await db()`update tastemakers set status = 'invited', updated_at = now() where id = ${body.tastemakerId}`;
+      const issued = await db().begin(async sql => {
+        const makers = await sql`select id from tastemakers where id = ${tastemakerId} and status <> 'archived' for update`;
+        if (!makers[0]) return false;
+        await sql`update creator_invites set used_at = now() where tastemaker_id = ${tastemakerId} and used_at is null`;
+        await sql`insert into creator_invites (tastemaker_id, token_hash, expires_at, created_by) values (${tastemakerId}, ${hashToken(rawToken)}, now() + interval '7 days', ${admin.id})`;
+        await sql`update tastemakers set status = 'invited', updated_at = now() where id = ${tastemakerId}`;
+        return true;
+      });
+      if (!issued) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
       await audit(admin.id, "creator_invite_created", "tastemaker", body.tastemakerId);
       return NextResponse.json({ ok: true, inviteUrl: `${appUrl()}/invite/${rawToken}` }, { status: 201 });
     }

@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
           for update
         `;
         if (!invites[0]) throw new Error("INVITE_INVALID");
-        await sql`update creator_invites set used_at = now() where id = ${invites[0].id}`;
+        await sql`update creator_invites set used_at = now() where tastemaker_id = ${invites[0].tastemaker_id} and used_at is null`;
         await sql`update tastemakers set owner_user_id = ${user.id}, status = case when status = 'invited' then 'draft' else status end, updated_at = now() where id = ${invites[0].tastemaker_id}`;
         await sql`update users set role = case when role = 'admin' then 'admin' else 'creator' end where id = ${user.id}`;
         return invites[0].tastemaker_id as string;
@@ -61,4 +61,3 @@ export async function GET(request: NextRequest) {
     return response;
   }
 }
-

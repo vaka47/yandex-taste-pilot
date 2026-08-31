@@ -7,7 +7,7 @@ Production-oriented pilot for following the real, opt-in listening history of ta
 - public profile at `/t/[slug]` without login;
 - Follow → official Yandex ID OAuth + PKCE → atomic pending-follow completion;
 - secure `HttpOnly` sessions and DB-backed roles;
-- one-use, seven-day creator invites issued only by an admin; ordinary Yandex ID sign-in always remains a fan account;
+- one-use, seven-day creator invites issued only by the owner admin; successful registration burns every outstanding invite for that tastemaker, while ordinary Yandex ID sign-in always remains a fan account;
 - creator invite claim, consent, pause/resume, publication delay, hide track/artist, disconnect and deletion request;
 - optional creator-uploaded square avatar, served from Taste and downloadable for the Yandex Music playlist cover;
 - operational admin actions, sync/audit logs, first-party funnel/intent/retention UI and CSV export;
@@ -64,6 +64,8 @@ Provision PostgreSQL, run `npm run migrate`, register an official Yandex OAuth a
 ```text
 https://YOUR_DOMAIN/auth/yandex/callback
 ```
+
+Set `ADMIN_YANDEX_IDS` to exactly one Yandex profile ID. Both the admin page and every admin API mutation verify the authenticated profile against that single-entry server allowlist; a stale `admin` role in PostgreSQL is not sufficient. There is no public admin preview or public navigation link.
 
 The service-account Yandex Music token must belong to a dedicated pilot account—not a founder's personal account and not a creator's account. Connect it in **Admin → Система → Подключить сервис**. The token is encrypted before it reaches PostgreSQL and is never stored in browser state. The encrypted/plain environment variables remain a break-glass fallback for existing installations.
 
