@@ -28,7 +28,12 @@ export async function POST(request: NextRequest) {
       await db()`update tastemakers set publish_enabled = ${Boolean(body.value)}, updated_at = now() where id = ${tastemakerId}`;
     } else if (body.type === "delay") {
       const delay = body.value === 86400 ? 86400 : 0;
-      await db()`update tastemakers set publication_delay_seconds = ${delay}, updated_at = now() where id = ${tastemakerId}`;
+      await db().begin(async sql => {
+        await sql`update tastemakers set publication_delay_seconds = ${delay}, updated_at = now() where id = ${tastemakerId}`;
+        if (delay === 0) {
+          await sql`update listening_events set publish_at = now() where tastemaker_id = ${tastemakerId} and visibility = 'public' and publish_at > now()`;
+        }
+      });
     } else if (body.type === "sync_interval") {
       const interval = Number(body.value);
       if (![300, 900, 3600].includes(interval)) return NextResponse.json({ error: "INVALID_SYNC_INTERVAL" }, { status: 400 });
@@ -49,7 +54,7 @@ export async function POST(request: NextRequest) {
     } else if (body.type === "delete_request") {
       await db()`insert into audit_logs (actor_user_id, action, entity_type, entity_id, metadata) values (${creator.id}, 'data_deletion_requested', 'tastemaker', ${tastemakerId}, ${db().json({ requestedAt: new Date().toISOString() })})`;
     } else return NextResponse.json({ error: "INVALID_ACTION_INPUT" }, { status: 400 });
-    if (["hide_event", "restore_event", "hide_artist", "publish_enabled"].includes(body.type)) operationResult = await syncTastemakerPlaylist(tastemakerId);
+    if (["hide_event", "restore_event", "hide_artist", "publish_enabled", "delay"].includes(body.type)) operationResult = await syncTastemakerPlaylist(tastemakerId);
     await audit(creator.id, `creator_${body.type}`, "tastemaker", tastemakerId, { value: typeof body.value === "string" || typeof body.value === "number" || typeof body.value === "boolean" ? body.value : undefined });
     return NextResponse.json({ ok: true, result: operationResult });
   } catch {

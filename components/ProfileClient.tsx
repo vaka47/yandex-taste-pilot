@@ -112,7 +112,7 @@ export function ProfileClient({ initialProfile, session, ownerView = false }: { 
 
         <section className="profileStats" aria-label="Статистика профиля">
           <div><strong>{compactNumber(profile.followerCount)}</strong><span>следят за вкусом</span></div>
-          <div><strong>{profile.events.length}</strong><span>сигналов за 7 дней</span></div>
+          <div><strong>{profile.events.length}</strong><span>последних событий</span></div>
           <div><strong>{profile.playlistTrackCount}</strong><span>треков в живом плейлисте</span></div>
           <button type="button" onClick={share}><Icon name="share" /><span>Поделиться профилем</span></button>
         </section>
