@@ -33,6 +33,7 @@ export type CreatorDashboardData = {
   slug: string;
   name: string;
   roleLine: string;
+  avatarUrl: string | null;
   status: TastemakerStatus;
   publishEnabled: boolean;
   publicationDelaySeconds: number;
@@ -207,6 +208,7 @@ export async function getCreatorDashboardData(userId: string, role: Role): Promi
   const accountId = maker.provider_account_id ? String(maker.provider_account_id) : null;
   return {
     id: String(maker.id), slug: String(maker.slug), name: String(maker.name), roleLine: String(maker.role_line),
+    avatarUrl: maker.avatar_url ? String(maker.avatar_url) : null,
     status: maker.status, publishEnabled: Boolean(maker.publish_enabled),
     publicationDelaySeconds: Number(maker.publication_delay_seconds || 0), followerCount: Number(maker.follower_count || 0),
     profileViews7d: Number(analytics[0]?.profile_views_7d || 0), uniqueVisitors7d: Number(analytics[0]?.unique_visitors_7d || 0),

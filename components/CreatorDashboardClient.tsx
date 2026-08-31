@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CoverArt } from "@/components/CoverArt";
 import { Icon } from "@/components/Icons";
+import { ProfilePortrait } from "@/components/ProfilePortrait";
 import { fixtureProfile } from "@/lib/fixtures";
 import { fullNumber, relativeTime } from "@/lib/format";
 import type { CreatorDashboardData } from "@/lib/server/dashboard";
@@ -11,6 +12,7 @@ type Challenge = { id: string; userCode: string; verificationUrl: string; expire
 
 const previewData: CreatorDashboardData = {
   id: fixtureProfile.id, slug: fixtureProfile.slug, name: fixtureProfile.name, roleLine: fixtureProfile.roleLine,
+  avatarUrl: fixtureProfile.avatarUrl,
   status: fixtureProfile.status, publishEnabled: true, publicationDelaySeconds: 0, followerCount: fixtureProfile.followerCount,
   profileViews7d: 24710, uniqueVisitors7d: 18420, trackOpens7d: 6834,
   connection: { status: "connected", login: "lera.sever.test", accountIdSuffix: "4281", lastSuccessAt: fixtureProfile.lastSyncAt, expiresAt: new Date(Date.now() + 346 * 86_400_000).toISOString(), errorCode: null },
@@ -26,6 +28,25 @@ function expiresLabel(value: string | null) {
   return days === 1 ? "через 1 день" : `через ${days} дн.`;
 }
 
+async function prepareSquareAvatar(file: File) {
+  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 10_000_000) throw new Error("INVALID_IMAGE");
+  const bitmap = await createImageBitmap(file);
+  const size = 720;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("CANVAS_UNAVAILABLE");
+  const scale = Math.max(size / bitmap.width, size / bitmap.height);
+  const width = bitmap.width * scale;
+  const height = bitmap.height * scale;
+  context.drawImage(bitmap, (size - width) / 2, (size - height) / 2, width, height);
+  bitmap.close();
+  const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, "image/webp", .88));
+  if (!blob) throw new Error("IMAGE_PROCESSING_FAILED");
+  return new File([blob], "taste-avatar.webp", { type: "image/webp" });
+}
+
 export function CreatorDashboardClient({ preview, initialData }: { preview: boolean; initialData: CreatorDashboardData | null }) {
   const data = initialData || previewData;
   const [paused, setPaused] = useState(data.status === "paused");
@@ -36,6 +57,9 @@ export function CreatorDashboardClient({ preview, initialData }: { preview: bool
   const [connectOpen, setConnectOpen] = useState(false);
   const [challenge, setChallenge] = useState<Challenge | null>(null);
   const [connectionState, setConnectionState] = useState<"connected" | "idle" | "starting" | "waiting" | "error">(data.connection.status === "connected" ? "connected" : data.connection.status === "error" ? "error" : "idle");
+  const avatarInput = useRef<HTMLInputElement>(null);
+  const [avatarUrl, setAvatarUrl] = useState(data.avatarUrl);
+  const [avatarBusy, setAvatarBusy] = useState(false);
 
   useEffect(() => {
     if (!challenge || preview || connectionState !== "waiting") return;
@@ -80,6 +104,35 @@ export function CreatorDashboardClient({ preview, initialData }: { preview: bool
     setConnectionState("waiting");
   }
 
+  async function uploadAvatar(file: File) {
+    if (preview) { setNotice("В live-кабинете фото будет обрезано до квадрата и опубликовано в профиле."); return; }
+    setAvatarBusy(true);
+    try {
+      const prepared = await prepareSquareAvatar(file);
+      const form = new FormData();
+      form.set("avatar", prepared);
+      const response = await fetch("/api/creator/avatar", { method: "POST", body: form });
+      const payload = await response.json().catch(() => ({})) as { avatarUrl?: string; error?: string };
+      if (!response.ok || !payload.avatarUrl) throw new Error(payload.error || "UPLOAD_FAILED");
+      setAvatarUrl(payload.avatarUrl);
+      setNotice("Фото профиля обновлено. Его же можно скачать для обложки live-плейлиста.");
+    } catch {
+      setNotice("Не удалось загрузить фото. Выберите JPG, PNG или WebP до 10 МБ.");
+    } finally {
+      setAvatarBusy(false);
+      if (avatarInput.current) avatarInput.current.value = "";
+    }
+  }
+
+  async function removeAvatar() {
+    if (preview) { setNotice("В live-кабинете фото можно удалить в любой момент."); return; }
+    setAvatarBusy(true);
+    const response = await fetch("/api/creator/avatar", { method: "DELETE" });
+    setAvatarBusy(false);
+    if (response.ok) { setAvatarUrl(null); setNotice("Фото удалено. В профиле снова используется фирменный Taste-портрет."); }
+    else setNotice("Не удалось удалить фото.");
+  }
+
   function hideEvent(id: string) {
     const next = hidden.includes(id) ? hidden.filter(value => value !== id) : [...hidden, id];
     setHidden(next);
@@ -91,6 +144,8 @@ export function CreatorDashboardClient({ preview, initialData }: { preview: bool
       <header className="workspaceTopbar creatorTopbar"><div><span>кабинет автора / {data.name}</span><h1>Ваш Taste — ваши правила</h1></div><div><a className="ghostButton" href={`/t/${data.slug}`} target="_blank"><Icon name="eye" />Открыть профиль</a><button type="button" className={`pauseButton ${paused ? "resume" : ""}`} onClick={() => { setPaused(value => !value); setPublishing(paused); void saveControl(paused ? "resume" : "pause"); }}><Icon name={paused ? "play" : "pause"} />{paused ? "Возобновить Taste" : "Поставить на паузу"}</button></div></header>
       {notice ? <div className="workspaceNotice warning"><Icon name="shield" /><span>{notice}</span><button type="button" onClick={() => setNotice("")}><Icon name="x" size={17} /></button></div> : null}
       {paused ? <section className="pauseBanner"><Icon name="pause" size={30} /><div><strong>Taste на паузе</strong><p>Новые события не публикуются, плейлист не меняется. Последнее публичное состояние сохранено.</p></div><button type="button" onClick={() => { setPaused(false); void saveControl("resume"); }}>Возобновить</button></section> : null}
+
+      <section className="creatorIdentityCard" aria-label="Фото публичного профиля"><ProfilePortrait compact name={data.name} avatarUrl={avatarUrl} /><div><span>публичный профиль</span><strong>{data.name}</strong><small>{avatarUrl ? "Фото опубликовано в Taste и готово для обложки плейлиста" : "Можно оставить фирменный портрет или загрузить своё фото"}</small></div><div className="creatorIdentityActions"><label className="darkButton">{avatarBusy ? "Обрабатываем…" : avatarUrl ? "Заменить фото" : "Загрузить фото"}<input ref={avatarInput} type="file" accept="image/jpeg,image/png,image/webp" disabled={avatarBusy} onChange={event => { const file = event.target.files?.[0]; if (file) void uploadAvatar(file); }} /></label>{avatarUrl ? <><a className="ghostButton" href={`${avatarUrl}${avatarUrl.includes("?") ? "&" : "?"}download=1`}><Icon name="arrow" />Скачать для Яндекс Музыки</a><button className="identityRemove" type="button" disabled={avatarBusy} onClick={() => void removeAvatar()}>Удалить</button></> : null}</div></section>
 
       <section className="creatorMetrics"><article><span>следят за вкусом</span><strong>{fullNumber(data.followerCount)}</strong><em>активные подписки</em></article><article><span>просмотры · 7д</span><strong>{fullNumber(data.profileViews7d)}</strong><em>{fullNumber(data.uniqueVisitors7d)} уникальных</em></article><article><span>открыли трек · 7д</span><strong>{fullNumber(data.trackOpens7d)}</strong><em>music intent, не стримы</em></article><article><span>live-плейлист</span><strong>{data.playlist.trackCount} <small>/ {data.playlist.maxTracks}</small></strong><em>{data.playlist.lastSyncAt ? `обновлён ${relativeTime(data.playlist.lastSyncAt)}` : "ещё не создан"}</em></article></section>
 

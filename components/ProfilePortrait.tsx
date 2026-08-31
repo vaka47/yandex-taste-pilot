@@ -1,11 +1,7 @@
-export function ProfilePortrait({ compact = false, name }: { compact?: boolean; name?: string | null }) {
+export function ProfilePortrait({ compact = false, name, avatarUrl }: { compact?: boolean; name?: string | null; avatarUrl?: string | null }) {
   return (
-    <span className={`profilePortrait ${compact ? "portraitCompact" : ""}`} role="img" aria-label={name ? `Стилизованный портрет: ${name}` : "Стилизованный портрет автора"}>
-      <span className="portraitSun" />
-      <span className="portraitHead" />
-      <span className="portraitHair" />
-      <span className="portraitBody" />
-      <span className="portraitGlint" />
+    <span className={`profilePortrait ${compact ? "portraitCompact" : ""} ${avatarUrl ? "hasPortraitImage" : ""}`} role="img" aria-label={name ? `Портрет: ${name}` : "Портрет автора"}>
+      {avatarUrl ? <img className="profilePortraitImage" src={avatarUrl} alt="" /> : <><span className="portraitSun" /><span className="portraitHead" /><span className="portraitHair" /><span className="portraitBody" /><span className="portraitGlint" /></>}
     </span>
   );
 }

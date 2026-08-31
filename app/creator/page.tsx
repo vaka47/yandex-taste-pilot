@@ -11,7 +11,7 @@ export default async function CreatorPage({ searchParams }: { searchParams: Prom
   const preview = (await searchParams).preview === "1";
   const user = await getSessionUser();
   const allowed = user && ["creator", "admin"].includes(user.role);
-  if (!allowed && !preview) return <main className="authGate creatorGate"><span>creator / private</span><h1>Ваш музыкальный вкус — под вашим контролем</h1><p>Войдите через Yandex ID, привязанный к приглашению. Подключение Яндекс Музыки выполняется отдельно.</p><Link href="/auth/yandex/start?returnTo=/creator">Продолжить с Яндекс ID</Link><Link className="previewLink" href="/creator?preview=1">Посмотреть кабинет в preview</Link></main>;
+  if (!allowed && !preview) return <main className="authGate creatorGate"><span>creator / invite only</span><h1>Кабинет открывается только по приглашению</h1><p>Регистрации авторов нет. Организатор пилота создаёт персональную одноразовую ссылку и отправляет её селебрити напрямую.</p><Link href="/">Вернуться на главную</Link><Link className="previewLink" href="/creator?preview=1">Посмотреть безопасный preview</Link></main>;
   const isPreview = !allowed;
   const data = user && allowed ? await getCreatorDashboardData(user.id, user.role) : null;
   return <WorkspaceShell area="creator" preview={isPreview} profileHref={data ? `/t/${data.slug}` : "/"}><CreatorDashboardClient preview={isPreview} initialData={data} /></WorkspaceShell>;

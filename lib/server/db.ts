@@ -85,6 +85,14 @@ async function createSchema() {
     )
   `;
   await sql`
+    create table if not exists tastemaker_avatars (
+      tastemaker_id uuid primary key references tastemakers(id) on delete cascade,
+      image_bytes bytea not null,
+      mime_type text not null check (mime_type in ('image/jpeg','image/png','image/webp')),
+      updated_at timestamptz not null default now()
+    )
+  `;
+  await sql`
     create table if not exists creator_invites (
       id uuid primary key default gen_random_uuid(),
       tastemaker_id uuid not null references tastemakers(id) on delete cascade,

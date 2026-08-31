@@ -7,7 +7,9 @@ Production-oriented pilot for following the real, opt-in listening history of ta
 - public profile at `/t/[slug]` without login;
 - Follow → official Yandex ID OAuth + PKCE → atomic pending-follow completion;
 - secure `HttpOnly` sessions and DB-backed roles;
+- one-use, seven-day creator invites issued only by an admin; ordinary Yandex ID sign-in always remains a fan account;
 - creator invite claim, consent, pause/resume, publication delay, hide track/artist, disconnect and deletion request;
+- optional creator-uploaded square avatar, served from Taste and downloadable for the Yandex Music playlist cover;
 - operational admin actions, sync/audit logs, first-party funnel/intent/retention UI and CSV export;
 - tracked `/go/track/[id]` and `/go/playlist/[id]` redirects with an allowlisted Yandex destination;
 - PostgreSQL migration and idempotent schema bootstrap;
@@ -64,6 +66,8 @@ https://YOUR_DOMAIN/auth/yandex/callback
 ```
 
 The service-account Yandex Music token must belong to a dedicated pilot account—not a founder's personal account and not a creator's account. Connect it in **Admin → Система → Подключить сервис**. The token is encrypted before it reaches PostgreSQL and is never stored in browser state. The encrypted/plain environment variables remain a break-glass fallback for existing installations.
+
+Create each celebrity from **Admin → Новый тейстмейкер**. This generates the only creator-registration path: a one-use invite URL that expires after seven days. After the creator uploads a profile photo, download the prepared square image from their cabinet and upload it once as the corresponding playlist cover while signed in to the service account. Track updates remain automatic; cover upload is manual because the supported community connector does not expose a reliable playlist-cover mutation.
 
 On Vercel Hobby, the 5/15-minute scheduler runs through the two protected GitHub Actions workflows in `.github/workflows/`. Configure identical `CRON_SECRET` values in GitHub Actions and the web project, and set the GitHub `APP_URL` secret to the production origin. Vercel Pro may instead use native Cron Jobs.
 

@@ -82,7 +82,7 @@ export function ProfileClient({ initialProfile, session }: { initialProfile: Tas
         <section className="profileHero">
           <div className="portraitStage">
             <div className="portraitMeta"><span>taste signal</span><b>01—{new Date().getFullYear()}</b></div>
-            <ProfilePortrait name={profile.name} />
+            <ProfilePortrait name={profile.name} avatarUrl={profile.avatarUrl} />
             <div className="nowTape">
               <span className="liveDot" />
               <div><small>последний сигнал · {relativeTime(profile.events[0]?.observedAt || null)}</small><strong>{profile.events[0]?.track.title}</strong><em>{profile.events[0]?.track.artists.join(", ")}</em></div>
