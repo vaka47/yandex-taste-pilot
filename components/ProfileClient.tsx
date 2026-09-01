@@ -177,8 +177,8 @@ export function ProfileClient({ initialProfile, session, ownerView = false }: { 
               {profile.fixture ? <span className="fixtureFlag">тестовые данные</span> : null}
             </div>
             <h1>Что слушает<br /><span>{profile.name}</span></h1>
-            <div className="identityLine"><strong>{profile.roleLine}</strong>{profile.verified ? <i className="verified"><Icon name="check" size={12} /></i> : null}</div>
-            <p>{profile.bio}</p>
+            {profile.roleLine || profile.verified ? <div className="identityLine">{profile.roleLine ? <strong>{profile.roleLine}</strong> : null}{profile.verified ? <i className="verified"><Icon name="check" size={12} /></i> : null}</div> : null}
+            {profile.bio ? <p>{profile.bio}</p> : null}
             <div className="heroActions">
               <button ref={primaryFollowRef} className={`primaryAction ${profile.viewerFollows ? "isFollowing" : ""}`} type="button" onClick={follow}>
                 <Icon name={profile.viewerFollows ? "check" : "pulse"} />
