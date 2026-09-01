@@ -8,6 +8,7 @@ export type AdminTastemakerRow = {
   name: string;
   avatarUrl: string | null;
   status: TastemakerStatus;
+  registered: boolean;
   followerCount: number;
   profileViews7d: number;
   uniqueVisitors7d: number;
@@ -16,6 +17,7 @@ export type AdminTastemakerRow = {
   trackOpens7d: number;
   playlistOpens7d: number;
   shares7d: number;
+  returnVisitors7d: number;
   lastSyncAt: string | null;
   playlistUrl: string | null;
   playlistStatus: "healthy" | "paused" | "error" | "not_created";
@@ -90,6 +92,7 @@ function eventFromRow(row: Record<string, any>): ListeningEvent {
       yandexUrl: String(row.yandex_url)
     },
     observedAt: iso(row.observed_at),
+    observedDate: row.raw_metadata?.observedDate ? String(row.raw_metadata.observedDate) : null,
     fetchedAt: iso(row.fetched_at) || new Date(0).toISOString(),
     publishAt: iso(row.publish_at) || new Date(0).toISOString(),
     visibility: row.visibility,
@@ -108,6 +111,7 @@ function analyticsFromRow(row: Record<string, any> | undefined): AnalyticsSummar
     follows7d: Number(row?.follows_7d || 0),
     trackOpens7d: Number(row?.track_opens_7d || 0),
     playlistOpens7d: Number(row?.playlist_opens_7d || 0),
+    returnVisitors7d: Number(row?.return_visitors_7d || 0),
     d1Retention: 0,
     d7Retention: 0
   };
@@ -117,7 +121,7 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
   await ensureSchema();
   const [makers, analytics, failures, audits, serviceConnections] = await Promise.all([
     db()`
-      select t.id, t.slug, t.name, t.avatar_url, t.status,
+      select t.id, t.slug, t.name, t.avatar_url, t.status, (t.owner_user_id is not null) as registered,
         count(distinct f.id) filter (where f.unfollowed_at is null)::int as follower_count,
         count(distinct a.id) filter (
           where a.event_name = 'tastemaker_profile_view' and a.created_at >= now() - interval '7 days'
@@ -140,6 +144,17 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
         count(distinct a.id) filter (
           where a.event_name = 'share_click' and a.created_at >= now() - interval '7 days'
         )::int as shares_7d,
+        (
+          select count(*)::int from (
+            select coalesce(rv.user_id::text, rv.anonymous_id) as visitor
+            from analytics_events rv
+            where rv.tastemaker_id = t.id and rv.event_name = 'tastemaker_profile_view'
+              and rv.created_at >= now() - interval '7 days'
+              and coalesce(rv.user_id::text, rv.anonymous_id) is not null
+            group by coalesce(rv.user_id::text, rv.anonymous_id)
+            having count(distinct (rv.created_at at time zone 'Europe/Moscow')::date) >= 2
+          ) returning_visitors
+        ) as return_visitors_7d,
         max(s.finished_at) filter (where s.status = 'success') as last_sync_at,
         mc.status as connection_status, p.public_url, p.last_error as playlist_error
       from tastemakers t
@@ -159,7 +174,17 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
         count(*) filter (where event_name = 'follow_click')::int as follow_clicks_7d,
         count(*) filter (where event_name = 'follow_completed')::int as follows_7d,
         count(*) filter (where event_name = 'track_open_click')::int as track_opens_7d,
-        count(*) filter (where event_name = 'playlist_open_click')::int as playlist_opens_7d
+        count(*) filter (where event_name = 'playlist_open_click')::int as playlist_opens_7d,
+        (
+          select count(*)::int from (
+            select coalesce(rv.user_id::text, rv.anonymous_id) as visitor
+            from analytics_events rv
+            where rv.event_name = 'tastemaker_profile_view' and rv.created_at >= now() - interval '7 days'
+              and coalesce(rv.user_id::text, rv.anonymous_id) is not null
+            group by coalesce(rv.user_id::text, rv.anonymous_id)
+            having count(distinct (rv.created_at at time zone 'Europe/Moscow')::date) >= 2
+          ) returning_visitors
+        ) as return_visitors_7d
       from analytics_events where created_at >= now() - interval '7 days'
     `,
     db()`select count(*)::int as count from sync_logs where status = 'failed' and started_at >= now() - interval '24 hours'`,
@@ -174,10 +199,10 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
   const serviceAccountId = serviceConnection?.provider_account_id ? String(serviceConnection.provider_account_id) : null;
   return {
     tastemakers: makers.map(row => ({
-      id: String(row.id), slug: String(row.slug), name: String(row.name), avatarUrl: row.avatar_url ? String(row.avatar_url) : null, status: row.status,
+      id: String(row.id), slug: String(row.slug), name: String(row.name), avatarUrl: row.avatar_url ? String(row.avatar_url) : null, status: row.status, registered: Boolean(row.registered),
       followerCount: Number(row.follower_count || 0), profileViews7d: Number(row.profile_views_7d || 0), uniqueVisitors7d: Number(row.unique_visitors_7d || 0),
       followClicks7d: Number(row.follow_clicks_7d || 0), follows7d: Number(row.follows_7d || 0), trackOpens7d: Number(row.track_opens_7d || 0),
-      playlistOpens7d: Number(row.playlist_opens_7d || 0), shares7d: Number(row.shares_7d || 0), lastSyncAt: iso(row.last_sync_at), playlistUrl: row.public_url ? String(row.public_url) : null,
+      playlistOpens7d: Number(row.playlist_opens_7d || 0), shares7d: Number(row.shares_7d || 0), returnVisitors7d: Number(row.return_visitors_7d || 0), lastSyncAt: iso(row.last_sync_at), playlistUrl: row.public_url ? String(row.public_url) : null,
       playlistStatus: row.status === "paused" ? "paused" : row.playlist_error ? "error" : row.public_url ? "healthy" : "not_created",
       connectionStatus: row.connection_status || "not_connected"
     })),
@@ -235,7 +260,7 @@ export async function getCreatorDashboardData(userId: string, role: Role): Promi
     id: String(maker.id), slug: String(maker.slug), name: String(maker.name), roleLine: String(maker.role_line), bio: String(maker.bio || ""),
     avatarUrl: maker.avatar_url ? String(maker.avatar_url) : null,
     status: maker.status, publishEnabled: Boolean(maker.publish_enabled),
-    publicationDelaySeconds: Number(maker.publication_delay_seconds || 0), syncIntervalSeconds: Number(maker.sync_interval_seconds || 300), followerCount: Number(maker.follower_count || 0),
+    publicationDelaySeconds: Number(maker.publication_delay_seconds || 0), syncIntervalSeconds: Number(maker.sync_interval_seconds || 60), followerCount: Number(maker.follower_count || 0),
     profileViews7d: Number(analytics[0]?.profile_views_7d || 0), uniqueVisitors7d: Number(analytics[0]?.unique_visitors_7d || 0),
     trackOpens7d: Number(analytics[0]?.track_opens_7d || 0),
     connection: {

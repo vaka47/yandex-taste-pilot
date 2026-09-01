@@ -46,7 +46,7 @@ export async function fetchYandexProfile(accessToken: string) {
 
 export async function upsertYandexUser(profile: YandexProfile) {
   await ensureSchema();
-  const displayName = profile.display_name || profile.real_name || profile.login || "Пользователь Taste";
+  const displayName = profile.display_name || profile.real_name || profile.login || "Пользователь Тейста";
   const avatarUrl = profile.default_avatar_id && !profile.is_avatar_empty
     ? `https://avatars.yandex.net/get-yapic/${profile.default_avatar_id}/islands-200`
     : null;

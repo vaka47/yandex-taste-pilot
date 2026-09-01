@@ -6,7 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { CoverArt } from "@/components/CoverArt";
 import { Icon } from "@/components/Icons";
 import { ProfilePortrait } from "@/components/ProfilePortrait";
-import { compactNumber, relativeTime } from "@/lib/format";
+import { compactNumber, listeningTime, relativeTime } from "@/lib/format";
 import type { SessionUser, TastemakerProfile } from "@/types/domain";
 
 function trackEvent(eventName: string, data: Record<string, unknown> = {}) {
@@ -66,7 +66,7 @@ export function ProfileClient({ initialProfile, session, ownerView = false }: { 
 
   async function share() {
     trackEvent("share_click", { tastemakerId: profile.id });
-    const shareData = { title: `Что слушает ${profile.name}`, text: `Реальная история прослушиваний ${profile.name} в Taste`, url: window.location.href };
+    const shareData = { title: `Что слушает ${profile.name}`, text: `История музыкального вкуса ${profile.name} в Тейсте`, url: window.location.href };
     if (navigator.share) await navigator.share(shareData).catch(() => undefined);
     else {
       await navigator.clipboard.writeText(window.location.href).catch(() => undefined);
@@ -83,10 +83,10 @@ export function ProfileClient({ initialProfile, session, ownerView = false }: { 
           <div className="portraitStage">
             <div className="portraitMeta"><span>сигнал вкуса</span><b>01—{new Date().getFullYear()}</b></div>
             <ProfilePortrait name={profile.name} avatarUrl={profile.avatarUrl} />
-            {ownerView && profile.avatarUrl ? <aside className="ownerPhotoTools"><span><Icon name="shield" />Только для владельца</span><a href={`${profile.avatarUrl}${profile.avatarUrl.includes("?") ? "&" : "?"}download=1`}><Icon name="arrow" />Скачать фото</a></aside> : null}
+            {ownerView && profile.avatarUrl ? <aside className="ownerPhotoTools"><span><Icon name="shield" />Только для владельца</span><a href={`${profile.avatarUrl}${profile.avatarUrl.includes("?") ? "&" : "?"}download=1`}><Icon name="arrow" />Скачать для обложки</a></aside> : null}
             <div className="nowTape">
               <span className="liveDot" />
-              <div><small>{profile.events[0] ? `последний сигнал · ${relativeTime(profile.events[0].observedAt)}` : "ждём первое прослушивание"}</small><strong>{profile.events[0]?.track.title || "История скоро появится"}</strong><em>{profile.events[0]?.track.artists.join(", ") || "Taste обновит страницу автоматически"}</em></div>
+              <div><small>{profile.events[0] ? `последняя запись · ${listeningTime(profile.events[0])}` : "ждём первую запись"}</small><strong>{profile.events[0]?.track.title || "История скоро появится"}</strong><em>{profile.events[0]?.track.artists.join(", ") || "Тейст обновит страницу автоматически"}</em></div>
               <span className="tapeBars" aria-hidden="true">▂▅▃▇▆▂</span>
             </div>
           </div>
@@ -104,7 +104,7 @@ export function ProfileClient({ initialProfile, session, ownerView = false }: { 
                 <Icon name={profile.viewerFollows ? "check" : "pulse"} />
                 {profile.viewerFollows ? "Вы следите за вкусом" : "Следить за вкусом"}
               </button>
-              {profile.playlistUrl ? <a className="playlistAction" href={`/go/playlist/${profile.id}`} target="_blank" rel="noreferrer"><Icon name="playlist" /> Живой плейлист <Icon name="arrow" size={17} /></a> : <button className="playlistAction" type="button" disabled><Icon name="clock" /> Плейлист готовится</button>}
+              {profile.viewerFollows && profile.playlistUrl ? <a className="playlistAction" href={`/go/playlist/${profile.id}`} target="_blank" rel="noreferrer"><Icon name="playlist" /> Живой плейлист <Icon name="arrow" size={17} /></a> : profile.viewerFollows ? <button className="playlistAction" type="button" disabled><Icon name="clock" /> Плейлист готовится</button> : null}
             </div>
             <div className="heroTrust"><Icon name="shield" size={18} /><span>Опубликовано с разрешения. Можно поставить на паузу в любой момент.</span></div>
           </div>
@@ -136,7 +136,7 @@ export function ProfileClient({ initialProfile, session, ownerView = false }: { 
                 <CoverArt tone={event.track.coverTone} title={event.track.title} />
                 <div className="eventTrack"><strong>{event.track.title}</strong><span>{event.track.artists.join(", ")}</span></div>
                 <div className="eventSignal"><i /><span>{index === 0 ? "последний сигнал" : event.playCount7d > 2 ? "возвращается к треку" : "в истории"}</span></div>
-                <time>{relativeTime(event.observedAt)}</time>
+                <time>{listeningTime(event)}</time>
                 <a className="trackOpen" href={`/go/track/${event.id}`} target="_blank" rel="noreferrer" aria-label={`Открыть ${event.track.title} в Яндекс Музыке`}>
                   <span>Открыть</span><Icon name="arrow" />
                 </a>
@@ -151,7 +151,7 @@ export function ProfileClient({ initialProfile, session, ownerView = false }: { 
             <p>Наблюдаемые повторы за последние 7 дней — не статистика Яндекса.</p>
           </header>
           <div className="repeatGrid">
-            {onRepeat.map((event, index) => (
+            {onRepeat.length ? onRepeat.map((event, index) => (
               <a href={`/go/track/${event.id}?source=on_repeat&position=${index + 1}`} target="_blank" rel="noreferrer" className="repeatItem" key={event.id}>
                 <CoverArt tone={event.track.coverTone} title={event.track.title} size="large" />
                 <span className="repeatRank">0{index + 1}</span>
@@ -159,7 +159,7 @@ export function ProfileClient({ initialProfile, session, ownerView = false }: { 
                 <span>{event.track.artists.join(", ")}</span>
                 <em>{event.consecutiveCount >= 2 ? `${event.consecutiveCount} подряд · ${event.playCount7d} за 7 дней` : `${event.playCount7d} наблюдаемых повторов за 7 дней`}</em>
               </a>
-            ))}
+            )) : <div className="sectionEmpty"><Icon name="pulse" /><strong>Повторы ещё не накопились</strong><span>Здесь появятся треки, которые встречались в истории несколько раз.</span></div>}
           </div>
         </section>
 
@@ -169,15 +169,15 @@ export function ProfileClient({ initialProfile, session, ownerView = false }: { 
             <p>Это первое появление в нашей истории, а не утверждение о личном «открытии» трека.</p>
           </header>
           <div className="firstSeenList">
-            {firstSeen.map((event, index) => (
+            {firstSeen.length ? firstSeen.map((event, index) => (
               <a href={`/go/track/${event.id}?source=new&position=${index + 1}`} target="_blank" rel="noreferrer" key={event.id}>
                 <span>{String(index + 1).padStart(2, "0")}</span>
                 <CoverArt tone={event.track.coverTone} title={event.track.title} size="small" />
                 <div><strong>{event.track.title}</strong><small>{event.track.artists.join(", ")}</small></div>
-                <em>впервые в Taste {relativeTime(event.firstSeenAt)}</em>
+                <em>впервые в Тейсте {relativeTime(event.firstSeenAt)}</em>
                 <Icon name="arrow" />
               </a>
-            ))}
+            )) : <div className="sectionEmpty"><Icon name="spark" /><strong>Новых записей пока нет</strong><span>Раздел заполнится после первой автоматической проверки истории.</span></div>}
           </div>
         </section>
 
@@ -185,7 +185,7 @@ export function ProfileClient({ initialProfile, session, ownerView = false }: { 
 
       <div className="mobileActions">
         <button type="button" onClick={follow}><Icon name={profile.viewerFollows ? "check" : "pulse"} />{profile.viewerFollows ? "Подписка активна" : "Следить"}</button>
-        {profile.playlistUrl ? <a href={`/go/playlist/${profile.id}`} target="_blank" rel="noreferrer"><Icon name="playlist" />Плейлист</a> : <button type="button" disabled><Icon name="clock" />Скоро</button>}
+        {profile.viewerFollows && profile.playlistUrl ? <a href={`/go/playlist/${profile.id}`} target="_blank" rel="noreferrer"><Icon name="playlist" />Плейлист</a> : profile.viewerFollows ? <button type="button" disabled><Icon name="clock" />Скоро</button> : null}
       </div>
 
       {playlistPromptOpen ? (
@@ -193,12 +193,12 @@ export function ProfileClient({ initialProfile, session, ownerView = false }: { 
           <section className="authModal playlistPrompt" role="dialog" aria-modal="true" aria-labelledby="playlist-prompt-title">
             <button className="modalClose" type="button" onClick={() => setPlaylistPromptOpen(false)} aria-label="Закрыть"><Icon name="x" /></button>
             <span className="modalSignal"><i /><i /><i /></span>
-            <small>подписка Taste активна</small>
+            <small>подписка в Тейсте активна</small>
             <h2 id="playlist-prompt-title">Теперь добавьте «Что слушает {profile.name}» в Яндекс Музыку</h2>
-            <p>Новые разрешённые треки будут автоматически появляться по этой же постоянной ссылке. В Яндекс Музыке нажмите лайк — плейлист попадёт в раздел «Вам понравилось».</p>
+            <p>Новые разрешённые треки будут автоматически появляться по этой же постоянной ссылке. В Яндекс Музыке добавьте плейлист к себе, чтобы он остался под рукой.</p>
             {profile.playlistUrl ? <a className="yandexLogin" href={`/go/playlist/${profile.id}?source=follow_success`} target="_blank" rel="noreferrer" onClick={() => setPlaylistPromptOpen(false)}><span>Я</span>Открыть и добавить плейлист<Icon name="arrow" /></a> : <button className="yandexLogin playlistPreparing" type="button" disabled><span>Я</span>Плейлист создаётся автоматически<Icon name="clock" /></button>}
-            <button className="playlistPromptLater" type="button" onClick={() => setPlaylistPromptOpen(false)}>Остаться в Taste</button>
-            <div className="modalPrivacy"><Icon name="lock" size={16} /> Taste не получает доступ к музыке фаната. Добавление плейлиста подтверждается лично в Яндекс Музыке.</div>
+            <button className="playlistPromptLater" type="button" onClick={() => setPlaylistPromptOpen(false)}>Остаться в Тейсте</button>
+            <div className="modalPrivacy"><Icon name="lock" size={16} /> Тейст не получает доступ к музыке фаната. Добавление плейлиста подтверждается лично в Яндекс Музыке.</div>
           </section>
         </div>
       ) : null}
@@ -209,8 +209,8 @@ export function ProfileClient({ initialProfile, session, ownerView = false }: { 
             <button className="modalClose" type="button" onClick={() => setAuthOpen(false)} aria-label="Закрыть"><Icon name="x" /></button>
             <span className="modalSignal"><i /><i /><i /></span>
             <small>один раз — и готово</small>
-            <h2 id="auth-title">Войдите, чтобы подписаться на Taste-профиль «{profile.name}»</h2>
-            <p>Яндекс ID нужен только для вашей учётной записи Taste. Доступ к вашей Яндекс Музыке мы не запрашиваем.</p>
+            <h2 id="auth-title">Войдите, чтобы следить за вкусом «{profile.name}»</h2>
+            <p>Яндекс ID нужен только для вашей учётной записи Тейста. Доступ к вашей Яндекс Музыке мы не запрашиваем.</p>
             <Link className="yandexLogin" href={authHref}><span>Я</span>Продолжить с Яндекс ID<Icon name="arrow" /></Link>
             <div className="modalPrivacy"><Icon name="lock" size={16} /> После входа подписка завершится автоматически — второй клик не нужен.</div>
           </section>

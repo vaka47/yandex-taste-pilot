@@ -16,6 +16,7 @@ function rowToEvent(row: Record<string, any>): ListeningEvent {
       yandexUrl: row.yandex_url
     },
     observedAt: row.observed_at?.toISOString?.() || row.observed_at || null,
+    observedDate: row.raw_metadata?.observedDate ? String(row.raw_metadata.observedDate) : null,
     fetchedAt: row.fetched_at?.toISOString?.() || row.fetched_at,
     publishAt: row.publish_at?.toISOString?.() || row.publish_at,
     visibility: row.visibility,
@@ -134,10 +135,16 @@ export async function getPublicEvent(eventId: string) {
   return rows[0] ? { event: rowToEvent(rows[0]), tastemakerId: rows[0].tastemaker_id as string } : null;
 }
 
-export async function getPlaylistDestination(tastemakerId: string) {
+export async function getPlaylistDestination(tastemakerId: string, viewerId: string) {
   if (!isDatabaseConfigured()) return tastemakerId === fixtureProfile.id ? fixtureProfile.playlistUrl : null;
   await ensureSchema();
-  const rows = await db()`select p.public_url from playlists p join tastemakers t on t.id = p.tastemaker_id where p.tastemaker_id = ${tastemakerId} and t.is_public = true limit 1`;
+  const rows = await db()`
+    select p.public_url from playlists p
+    join tastemakers t on t.id = p.tastemaker_id and t.is_public = true
+    join follows f on f.tastemaker_id = t.id and f.user_id = ${viewerId} and f.unfollowed_at is null
+    where p.tastemaker_id = ${tastemakerId}
+    limit 1
+  `;
   return (rows[0]?.public_url as string | undefined) || null;
 }
 

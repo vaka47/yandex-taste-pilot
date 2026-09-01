@@ -25,18 +25,20 @@ export async function POST(request: NextRequest) {
     }
     if (body.type === "create_tastemaker") {
       if (!body.name || !body.slug) return NextResponse.json({ error: "NAME_AND_SLUG_REQUIRED" }, { status: 400 });
-      const created = await db()`insert into tastemakers (name, slug, role_line, status) values (${body.name.slice(0, 100)}, ${body.slug.toLowerCase().replace(/[^a-z0-9-]/g, "-").slice(0, 60)}, ${body.roleLine?.slice(0, 120) || "автор вкуса"}, 'draft') returning id`;
+      const normalizedSlug = body.slug.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+      if (normalizedSlug.length < 3) return NextResponse.json({ error: "INVALID_SLUG" }, { status: 400 });
+      const created = await db()`insert into tastemakers (name, slug, role_line, status, publication_delay_seconds, sync_interval_seconds) values (${body.name.trim().slice(0, 100)}, ${normalizedSlug}, ${body.roleLine?.trim().slice(0, 120) || "автор вкуса"}, 'draft', 0, 60) returning id, slug`;
       const rawToken = randomToken(32);
       await db()`insert into creator_invites (tastemaker_id, token_hash, expires_at, created_by) values (${created[0].id}, ${hashToken(rawToken)}, now() + interval '7 days', ${admin.id})`;
       await db()`update tastemakers set status = 'invited', updated_at = now() where id = ${created[0].id}`;
       await audit(admin.id, "tastemaker_created", "tastemaker", created[0].id);
-      return NextResponse.json({ ok: true, id: created[0].id, inviteUrl: `${appUrl()}/invite/${rawToken}` }, { status: 201 });
+      return NextResponse.json({ ok: true, id: created[0].id, slug: created[0].slug, inviteUrl: `${appUrl()}/invite/${rawToken}` }, { status: 201 });
     }
     if (body.type === "create_invite" && body.tastemakerId) {
       const tastemakerId = body.tastemakerId;
       const rawToken = randomToken(32);
       const issued = await db().begin(async sql => {
-        const makers = await sql`select id from tastemakers where id = ${tastemakerId} and status <> 'archived' for update`;
+        const makers = await sql`select id from tastemakers where id = ${tastemakerId} and owner_user_id is null and status in ('draft', 'invited') for update`;
         if (!makers[0]) return false;
         await sql`update creator_invites set used_at = now() where tastemaker_id = ${tastemakerId} and used_at is null`;
         await sql`insert into creator_invites (tastemaker_id, token_hash, expires_at, created_by) values (${tastemakerId}, ${hashToken(rawToken)}, now() + interval '7 days', ${admin.id})`;

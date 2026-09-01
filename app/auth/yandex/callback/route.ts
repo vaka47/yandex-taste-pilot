@@ -28,13 +28,15 @@ export async function GET(request: NextRequest) {
       await ensureSchema();
       const claimed = await db().begin(async sql => {
         const invites = await sql`
-          select id, tastemaker_id from creator_invites
-          where token_hash = ${hashToken(saved.invite!)} and used_at is null and expires_at > now()
+          select ci.id, ci.tastemaker_id from creator_invites ci
+          join tastemakers t on t.id = ci.tastemaker_id and t.owner_user_id is null and t.status in ('draft', 'invited')
+          where ci.token_hash = ${hashToken(saved.invite!)} and ci.used_at is null and ci.expires_at > now()
           for update
         `;
         if (!invites[0]) throw new Error("INVITE_INVALID");
         await sql`update creator_invites set used_at = now() where tastemaker_id = ${invites[0].tastemaker_id} and used_at is null`;
-        await sql`update tastemakers set owner_user_id = ${user.id}, status = case when status = 'invited' then 'draft' else status end, updated_at = now() where id = ${invites[0].tastemaker_id}`;
+        const bound = await sql`update tastemakers set owner_user_id = ${user.id}, status = 'draft', updated_at = now() where id = ${invites[0].tastemaker_id} and owner_user_id is null returning id`;
+        if (!bound[0]) throw new Error("INVITE_ALREADY_CLAIMED");
         await sql`update users set role = case when role = 'admin' then 'admin' else 'creator' end where id = ${user.id}`;
         return invites[0].tastemaker_id as string;
       });

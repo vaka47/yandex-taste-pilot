@@ -27,7 +27,9 @@ export async function POST(request: NextRequest) {
     } else if (body.type === "publish_enabled") {
       await db()`update tastemakers set publish_enabled = ${Boolean(body.value)}, updated_at = now() where id = ${tastemakerId}`;
     } else if (body.type === "delay") {
-      const delay = body.value === 86400 ? 86400 : 0;
+      const requestedDelay = Number(body.value);
+      if (![0, 3600, 21600, 86400].includes(requestedDelay)) return NextResponse.json({ error: "INVALID_PUBLICATION_DELAY" }, { status: 400 });
+      const delay = requestedDelay;
       await db().begin(async sql => {
         await sql`update tastemakers set publication_delay_seconds = ${delay}, updated_at = now() where id = ${tastemakerId}`;
         if (delay === 0) {
@@ -36,7 +38,7 @@ export async function POST(request: NextRequest) {
       });
     } else if (body.type === "sync_interval") {
       const interval = Number(body.value);
-      if (![300, 900, 3600].includes(interval)) return NextResponse.json({ error: "INVALID_SYNC_INTERVAL" }, { status: 400 });
+      if (![60, 300, 900, 3600].includes(interval)) return NextResponse.json({ error: "INVALID_SYNC_INTERVAL" }, { status: 400 });
       await db()`update tastemakers set sync_interval_seconds = ${interval}, updated_at = now() where id = ${tastemakerId}`;
     } else if ((body.type === "hide_event" || body.type === "restore_event") && typeof body.value === "string") {
       await db()`update listening_events set visibility = ${body.type === "hide_event" ? "hidden" : "public"}, hidden_reason = ${body.type === "hide_event" ? "hidden_by_creator" : null} where id::text = ${body.value} and tastemaker_id = ${tastemakerId}`;

@@ -25,7 +25,7 @@ create table if not exists tastemakers (
   status text not null default 'draft' check (status in ('draft','invited','connected','active','paused','disconnected','archived')),
   is_public boolean not null default false, publish_enabled boolean not null default false,
   publication_delay_seconds integer not null default 0,
-  sync_interval_seconds integer not null default 300 check (sync_interval_seconds in (300, 900, 3600)), fixture boolean not null default false,
+  sync_interval_seconds integer not null default 60 check (sync_interval_seconds in (60, 300, 900, 3600)), fixture boolean not null default false,
   consent_version text, consent_at timestamptz, created_at timestamptz not null default now(), updated_at timestamptz not null default now()
 );
 create table if not exists tastemaker_avatars (

@@ -9,12 +9,12 @@ export function WorkspaceShell({ area, profileHref = "/", children }: { area: "a
     <div className={`workspace ${admin ? "adminWorkspace" : "creatorWorkspace"}`}>
       <aside className="workspaceRail">
         <Brand inverse />
-        <span className="workspaceLabel">{admin ? "управление" : "кабинет автора"}</span>
+        <span className="workspaceLabel">{admin ? "управление" : "кабинет тейстмейкера"}</span>
         <nav>
           <Link className="active" href={workspaceHref}><Icon name="home" />Обзор</Link>
-          <Link href={`${workspaceHref}${admin ? "#tastemakers" : "#history"}`}><Icon name={admin ? "users" : "music"} />{admin ? "Тейстмейкеры" : "История"}</Link>
-          <Link href={`${workspaceHref}${admin ? "#analytics" : "#privacy"}`}><Icon name={admin ? "pulse" : "shield"} />{admin ? "Аналитика" : "Приватность"}</Link>
-          <Link href={`${workspaceHref}${admin ? "#sync" : "#connection"}`}><Icon name="sync" />{admin ? "Синхронизации" : "Подключение"}</Link>
+          <Link href={`${workspaceHref}${admin ? "#tastemakers" : "#history"}`}><Icon name={admin ? "users" : "music"} />{admin ? "Тейстмейкеры и аналитика" : "История"}</Link>
+          {admin ? null : <Link href={`${workspaceHref}#privacy`}><Icon name="shield" />Приватность</Link>}
+          <Link href={`${workspaceHref}${admin ? "#sync" : "#connection"}`}><Icon name="sync" />{admin ? "Система" : "Подключение"}</Link>
         </nav>
         <div className="railBottom"><span className="liveStatus"><i />защищённый вход</span><Link href={profileHref}><Icon name="eye" />Публичный профиль</Link><form action="/auth/logout" method="post"><button type="submit"><Icon name="user" />Выйти</button></form></div>
       </aside>

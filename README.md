@@ -1,4 +1,4 @@
-# Taste — Yandex Music Pilot
+# Тейст — пилот для Яндекс Музыки
 
 Production-oriented pilot for following the real, opt-in listening history of tastemakers. The web app is the measurement layer; one stable Yandex Music playlist per tastemaker is the delivery layer.
 
@@ -17,14 +17,14 @@ Production-oriented pilot for following the real, opt-in listening history of ta
 - non-blocking Device Flow challenge/polling; music tokens never reach browser storage;
 - real history import, privacy filtering, stable deduplication, zero delay by default and optional 24h publication delay;
 - one chained history → latest-50 unique playlist sync through a dedicated service account, connected from the protected admin UI;
-- automatic 5-minute checks by default, with creator-selectable 5/15/60-minute intervals and immediate playlist delivery after each successful history check;
+- fastest publication by default: a 60-second sync preference, opportunistic checks when an active public profile or creator cabinet opens, and immediate playlist delivery after every successful history import; creators may switch to 5/15/60-minute checks;
 - cron leases, normalized provider errors and per-tastemaker failure isolation;
 - responsive public, admin and creator interfaces, reduced-motion support and visible keyboard focus;
 - fixture mode for safe demos before accounts/secrets are connected.
 
 ## Important truth boundary
 
-Yandex adds a track to listening history only after it has played to completion; there is no supported seconds threshold for Taste to configure. The current community API returns reliable day/order history but does not guarantee an exact listened-at timestamp for every event. The connector therefore emits `observedAt: null` when only day/order exists. The app must never invent clock precision.
+Тейст не решает, после скольких секунд трек считается прослушанным. Яндекс Музыка сама формирует историю, а доступный неофициальный интерфейс не раскрывает ни порог в секундах, ни признак «дослушан до конца». Как только запись становится доступна в истории Яндекса, ближайшая проверка Тейста переносит её в профиль и живой плейлист. Интерфейс возвращает надёжные день и порядок записей, но не гарантирует точное время каждого прослушивания; поэтому коннектор передаёт `observedAt: null`, когда известны только день и порядок. Продукт не должен придумывать секундную точность.
 
 `track_open_click` is **music intent**, not a stream. The product never claims playback started or finished.
 
@@ -72,7 +72,7 @@ The service-account Yandex Music token must belong to a dedicated pilot account�
 
 Create each celebrity from **Админка → Пригласить тейстмейкера**. This generates the only creator-registration path: a one-use invite URL that expires after seven days. After the creator uploads a profile photo, the owner can open that public profile from the admin dashboard, download the prepared square image, and upload it once as the corresponding playlist cover while signed in to the service account. Track updates remain automatic; cover upload is manual because the supported community connector does not expose a reliable playlist-cover mutation.
 
-On Vercel Hobby, one protected GitHub Actions workflow runs every five minutes. It chains history import and playlist delivery in the same request; the per-tastemaker lease applies a creator's 5/15/60-minute preference. Configure identical `CRON_SECRET` values in GitHub Actions and the web project, and set the GitHub `APP_URL` secret to the production origin. Vercel Pro may instead use native Cron Jobs.
+On Vercel Hobby, one protected GitHub Actions workflow provides a five-minute background safety check—the minimum GitHub Actions cron interval. Active public profiles and the creator cabinet also request a safe opportunistic sync, while the default tastemaker preference is 60 seconds. This makes an already-visible active page refresh promptly, but it is not a real-time Yandex webhook: when nobody opens the product, the Hobby safety loop may take up to five minutes after Yandex exposes the history entry. Configure identical `CRON_SECRET` values in GitHub Actions and the web project, and set the GitHub `APP_URL` secret to the production origin. A one-minute external scheduler or Vercel Pro Cron can tighten the unattended interval later.
 
 ## Required external setup before a real account test
 

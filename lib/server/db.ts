@@ -78,7 +78,7 @@ async function createSchema() {
       is_public boolean not null default false,
       publish_enabled boolean not null default false,
       publication_delay_seconds integer not null default 0,
-      sync_interval_seconds integer not null default 300 check (sync_interval_seconds in (300, 900, 3600)),
+      sync_interval_seconds integer not null default 60 check (sync_interval_seconds in (60, 300, 900, 3600)),
       fixture boolean not null default false,
       consent_version text,
       consent_at timestamptz,
@@ -295,8 +295,17 @@ async function createSchema() {
     )
   `;
   await sql`alter table sessions add column if not exists auth_context text not null default 'yandex'`;
-  await sql`alter table tastemakers add column if not exists sync_interval_seconds integer not null default 300`;
+  await sql`alter table tastemakers add column if not exists sync_interval_seconds integer not null default 60`;
   await sql`alter table tastemakers alter column publication_delay_seconds set default 0`;
+  await sql`create table if not exists schema_migrations (version text primary key, applied_at timestamptz not null default now())`;
+  await sql.begin(async transaction => {
+    const applied = await transaction`insert into schema_migrations(version) values ('002_fast_sync') on conflict do nothing returning version`;
+    if (!applied[0]) return;
+    await transaction`alter table tastemakers drop constraint if exists tastemakers_sync_interval_seconds_check`;
+    await transaction`alter table tastemakers alter column sync_interval_seconds set default 60`;
+    await transaction`update tastemakers set sync_interval_seconds = 60 where sync_interval_seconds = 300`;
+    await transaction`alter table tastemakers add constraint tastemakers_sync_interval_seconds_check check (sync_interval_seconds in (60, 300, 900, 3600))`;
+  });
   await sql`
     create table if not exists admin_login_attempts (
       id uuid primary key default gen_random_uuid(),
@@ -305,7 +314,7 @@ async function createSchema() {
     )
   `;
   await sql`create index if not exists admin_login_attempts_key_idx on admin_login_attempts(client_key, attempted_at desc)`;
-  await sql`update tastemakers set name = 'Сафонов Иван', updated_at = now() where slug = 'pilot-author' and name = 'Пилотный автор'`;
+  await sql`update tastemakers set name = 'Сафонов Иван', updated_at = now() where name = 'Пилотный автор'`;
 }
 
 export async function ensureSchema() {

@@ -16,6 +16,7 @@ export type ListeningEvent = {
   id: string;
   track: Track;
   observedAt: string | null;
+  observedDate: string | null;
   fetchedAt: string;
   publishAt: string;
   visibility: EventVisibility;
@@ -62,6 +63,7 @@ export type AnalyticsSummary = {
   follows7d: number;
   trackOpens7d: number;
   playlistOpens7d: number;
+  returnVisitors7d: number;
   d1Retention: number;
   d7Retention: number;
 };

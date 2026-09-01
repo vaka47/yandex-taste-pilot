@@ -5,7 +5,7 @@ import { recordAnalytics } from "@/lib/server/analytics";
 
 async function mutate(request: NextRequest, context: { params: Promise<{ id: string }> }, following: boolean) {
   const user = await getSessionUser();
-  if (!user) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  if (!user || user.authContext !== "yandex") return NextResponse.json({ error: "YANDEX_ID_REQUIRED" }, { status: 401 });
   const { id } = await context.params;
   try {
     const followerCount = await toggleFollow(user.id, id, following, request.cookies.get("taste_first_source")?.value || null);
@@ -18,4 +18,3 @@ async function mutate(request: NextRequest, context: { params: Promise<{ id: str
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) { return mutate(request, context, true); }
 export async function DELETE(request: NextRequest, context: { params: Promise<{ id: string }> }) { return mutate(request, context, false); }
-
