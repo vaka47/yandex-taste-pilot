@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ProfileClient } from "@/components/ProfileClient";
 import { PublicHeader } from "@/components/PublicHeader";
 import { getPublicProfile } from "@/lib/server/repository";
@@ -12,6 +12,10 @@ export default async function TastemakerPage({ params }: { params: Promise<{ slu
   const { slug } = await params;
   const session = await getSessionUser();
   let profile = await getPublicProfile(slug, session?.id || null);
+  if (!profile && slug === "pilot-author") {
+    const renamedProfile = await getPublicProfile("safonov-ivan", session?.id || null);
+    if (renamedProfile) redirect("/t/safonov-ivan");
+  }
   if (!profile) notFound();
   if (!profile.fixture && profile.status === "active" && profile.publishEnabled) {
     await syncTastemakerFully(profile.id).catch(() => undefined);

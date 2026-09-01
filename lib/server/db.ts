@@ -315,6 +315,11 @@ async function createSchema() {
   `;
   await sql`create index if not exists admin_login_attempts_key_idx on admin_login_attempts(client_key, attempted_at desc)`;
   await sql`update tastemakers set name = 'Сафонов Иван', updated_at = now() where name = 'Пилотный автор'`;
+  await sql`
+    update tastemakers t set slug = 'safonov-ivan', updated_at = now()
+    where t.slug = 'pilot-author'
+      and not exists (select 1 from tastemakers existing where existing.slug = 'safonov-ivan' and existing.id <> t.id)
+  `;
 }
 
 export async function ensureSchema() {
