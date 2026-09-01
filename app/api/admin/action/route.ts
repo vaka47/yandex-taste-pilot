@@ -6,8 +6,9 @@ import { requireRole } from "@/lib/server/session";
 import { sameOrigin } from "@/lib/server/security";
 import { audit } from "@/lib/server/audit";
 import { syncTastemakerFully, syncTastemakerPlaylist } from "@/lib/server/sync";
+import { dispatchDailyTelegramNotifications, setupTelegramWebhook } from "@/lib/server/telegram";
 
-const allowed = new Set(["pause", "sync", "playlist_rebuild", "create_tastemaker", "create_invite", "archive"]);
+const allowed = new Set(["pause", "sync", "playlist_rebuild", "create_tastemaker", "create_invite", "archive", "setup_telegram"]);
 
 export async function POST(request: NextRequest) {
   if (!sameOrigin(request)) return NextResponse.json({ error: "INVALID_ORIGIN" }, { status: 403 });
@@ -17,6 +18,11 @@ export async function POST(request: NextRequest) {
   if (!body.type || !allowed.has(body.type)) return NextResponse.json({ error: "ACTION_NOT_ALLOWED" }, { status: 400 });
   await ensureSchema();
   try {
+    if (body.type === "setup_telegram") {
+      await setupTelegramWebhook();
+      await audit(admin.id, "telegram_webhook_configured", "system", "telegram");
+      return NextResponse.json({ ok: true });
+    }
     if (body.type === "pause" && body.tastemakerId) {
       const rows = await db()`update tastemakers set status = case when status = 'paused' then 'active' else 'paused' end, publish_enabled = case when status = 'paused' then true else false end, updated_at = now() where id = ${body.tastemakerId} returning status`;
       if (!rows[0]) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
@@ -54,8 +60,9 @@ export async function POST(request: NextRequest) {
       const result = body.type === "sync"
         ? await syncTastemakerFully(body.tastemakerId, true)
         : await syncTastemakerPlaylist(body.tastemakerId);
+      const telegram = result.ok ? await dispatchDailyTelegramNotifications() : null;
       await audit(admin.id, jobType, "tastemaker", body.tastemakerId, { result });
-      return NextResponse.json({ ok: result.ok, result }, { status: result.ok ? 200 : 502 });
+      return NextResponse.json({ ok: result.ok, result, telegram }, { status: result.ok ? 200 : 502 });
     }
     if (body.type === "archive" && body.tastemakerId) {
       await db()`update tastemakers set status = 'archived', is_public = false, publish_enabled = false, updated_at = now() where id = ${body.tastemakerId}`;

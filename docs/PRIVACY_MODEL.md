@@ -6,9 +6,12 @@ Fan Yandex ID and creator Yandex Music access are separate authorizations.
 - Creator Device Flow is experimental, explicit and revocable.
 - Access/refresh tokens are encrypted at rest and server-only.
 - Public queries require `visibility='public'` and `publish_at <= now()`.
+- Anonymous profile reads receive no event rows, track titles or artist names. Only identity and aggregate activity are returned; the full event set is returned by the server after Yandex ID authentication and is not merely hidden with CSS.
+- Unlocking history and following are separate decisions. Login never creates a follow unless the visitor explicitly started with “Следить”.
 - Pause disables publication and playlist writes.
 - Hidden tracks/artists disappear from public reads and the next playlist sync.
 - Disconnect clears encrypted credentials and stops sync.
 - Deletion requests are audit logged for admin-assisted completion.
+- Telegram linking uses a hashed one-use token that expires after 15 minutes. Notifications are enabled only for active follows and are disabled automatically on unfollow. Telegram identifiers are never exposed in public responses.
 
 The connector is unofficial and must not be presented as a Yandex partnership or endorsement.

@@ -47,7 +47,7 @@ export async function syncTastemakerHistory(tastemakerId: string, force = false)
   const logRows = await db()`insert into sync_logs (tastemaker_id, job_type, status, stats) values (${tastemakerId}, 'sync_music_history', 'running', '{}'::jsonb) returning id`;
   const logId = logRows[0].id;
   try {
-    const result = await connectorRequest<{ events: NormalizedProviderEvent[] }>("/internal/yandex-music/history/fetch", { token: decryptSecret(lease[0].encrypted_access_token), fullModelsCount: 150 });
+    const result = await connectorRequest<{ events: NormalizedProviderEvent[] }>("/internal/yandex-music/history/fetch", { token: decryptSecret(lease[0].encrypted_access_token), fullModelsCount: 250 });
     const blocked = await db()`select provider_track_id as track_id, null::text as artist from blocked_tracks where tastemaker_id = ${tastemakerId} union all select null::text, artist_name_normalized from blocked_artists where tastemaker_id = ${tastemakerId}`;
     const blockedTracks = new Set(blocked.map(row => row.track_id).filter(Boolean));
     const blockedArtists = new Set(blocked.map(row => row.artist).filter(Boolean));

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminYandexIds, appUrl, hasSingleAdminConfigured } from "@/lib/server/config";
+import { appUrl, hasSingleAdminConfigured, isAdminYandexId } from "@/lib/server/config";
 import { hashToken, verifyPassword } from "@/lib/server/crypto";
 import { db, ensureSchema, isDatabaseConfigured } from "@/lib/server/db";
 import { sameOrigin } from "@/lib/server/security";
-import { createSession } from "@/lib/server/session";
+import { createSession, getSessionUser } from "@/lib/server/session";
 
 function adminRedirect(request: NextRequest, state: string) {
   const target = new URL("/admin", appUrl() || request.url);
@@ -14,6 +14,10 @@ function adminRedirect(request: NextRequest, state: string) {
 export async function POST(request: NextRequest) {
   if (!sameOrigin(request)) return NextResponse.json({ error: "INVALID_ORIGIN" }, { status: 403 });
   if (!isDatabaseConfigured() || !hasSingleAdminConfigured()) return adminRedirect(request, "unavailable");
+  const currentUser = await getSessionUser();
+  if (!currentUser || currentUser.role !== "admin" || currentUser.authContext !== "yandex" || !isAdminYandexId(currentUser.yandexId)) {
+    return adminRedirect(request, "unavailable");
+  }
 
   const form = await request.formData().catch(() => null);
   const username = String(form?.get("username") || "").trim().slice(0, 80);
@@ -33,16 +37,7 @@ export async function POST(request: NextRequest) {
   const credentialsValid = username === expectedUsername && verifyPassword(password, passwordHash);
   if (!credentialsValid) return adminRedirect(request, "failed");
 
-  const adminYandexId = [...adminYandexIds()][0];
-  const owners = await db()`
-    select u.id
-    from users u
-    join auth_identities ai on ai.user_id = u.id and ai.provider = 'yandex_id'
-    where u.role = 'admin' and u.is_active = true and ai.provider_user_id = ${adminYandexId}
-    limit 2
-  `;
-  if (owners.length !== 1) return adminRedirect(request, "unavailable");
-  await createSession(String(owners[0].id), "owner_password");
+  await createSession(currentUser.id, "owner_password");
   await db()`delete from admin_login_attempts where client_key = ${clientKey}`;
   return NextResponse.redirect(new URL("/admin", appUrl() || request.url), 303);
 }

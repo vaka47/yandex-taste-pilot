@@ -1,6 +1,7 @@
 import "server-only";
 import { fixtureProfile } from "@/lib/fixtures";
 import { db, ensureSchema, isDatabaseConfigured } from "@/lib/server/db";
+import { telegramNotificationsConfigured } from "@/lib/server/config";
 import type { ListeningEvent, TastemakerProfile } from "@/types/domain";
 
 function rowToEvent(row: Record<string, any>): ListeningEvent {
@@ -42,7 +43,12 @@ function publicEventsFromRows(rows: Array<Record<string, any>>) {
 }
 
 export async function getPublicProfile(slug: string, viewerId: string | null): Promise<TastemakerProfile | null> {
-  if (!isDatabaseConfigured()) return [fixtureProfile.slug, "demo", "lera"].includes(slug) ? { ...fixtureProfile } : null;
+  if (!isDatabaseConfigured()) {
+    if (![fixtureProfile.slug, "demo", "lera"].includes(slug)) return null;
+    return viewerId
+      ? { ...fixtureProfile, historyAccess: "full" }
+      : { ...fixtureProfile, historyAccess: "teaser", events: [], viewerFollows: false };
+  }
   await ensureSchema();
   const profileRows = await db()`
     select t.*,
@@ -54,7 +60,18 @@ export async function getPublicProfile(slug: string, viewerId: string | null): P
         where pe.tastemaker_id = t.id and pe.visibility = 'public' and pe.publish_at <= now()
       ) as playlist_track_count,
       p.last_sync_at,
-      exists(select 1 from follows vf where vf.tastemaker_id = t.id and vf.user_id = ${viewerId} and vf.unfollowed_at is null) as viewer_follows
+      exists(select 1 from follows vf where vf.tastemaker_id = t.id and vf.user_id = ${viewerId} and vf.unfollowed_at is null) as viewer_follows,
+      exists(select 1 from telegram_accounts ta where ta.user_id = ${viewerId} and ta.status = 'active') as telegram_connected,
+      exists(select 1 from telegram_subscriptions ts where ts.tastemaker_id = t.id and ts.user_id = ${viewerId} and ts.active = true) as telegram_subscribed,
+      (
+        select count(*)::int from listening_events te
+        where te.tastemaker_id = t.id and te.visibility = 'public' and te.publish_at <= now()
+          and coalesce(
+            te.observed_at,
+            case when coalesce(te.raw_metadata->>'observedDate', '') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then (te.raw_metadata->>'observedDate')::date::timestamptz end,
+            te.fetched_at
+          ) > now() - interval '30 days'
+      ) as total_event_count_30d
     from tastemakers t
     left join follows f on f.tastemaker_id = t.id
     left join playlists p on p.tastemaker_id = t.id
@@ -95,7 +112,7 @@ export async function getPublicProfile(slug: string, viewerId: string | null): P
         e.fetched_at
       ) desc,
       case when coalesce(e.raw_metadata->>'providerPosition', '') ~ '^[0-9]+$' then (e.raw_metadata->>'providerPosition')::int end asc nulls last
-    limit 80
+    limit ${viewerId ? 80 : 0}
   `;
   return {
     id: row.id, slug: row.slug, name: row.name, bio: row.bio, roleLine: row.role_line,
@@ -104,12 +121,19 @@ export async function getPublicProfile(slug: string, viewerId: string | null): P
     followerCount: Number(row.follower_count), playlistUrl: row.playlist_url,
     playlistTrackCount: Number(row.playlist_track_count || 0),
     lastSyncAt: row.last_sync_at?.toISOString?.() || row.last_sync_at || null,
-    viewerFollows: Boolean(row.viewer_follows), fixture: Boolean(row.fixture), events: publicEventsFromRows(events)
+    viewerFollows: Boolean(row.viewer_follows), fixture: Boolean(row.fixture), events: publicEventsFromRows(events),
+    historyAccess: viewerId ? "full" : "teaser",
+    totalEventCount30d: Number(row.total_event_count_30d || 0),
+    telegram: {
+      available: telegramNotificationsConfigured(),
+      connected: Boolean(row.telegram_connected),
+      subscribed: Boolean(row.telegram_subscribed)
+    }
   } as TastemakerProfile;
 }
 
 export async function getFeaturedPublicProfile(viewerId: string | null): Promise<TastemakerProfile | null> {
-  if (!isDatabaseConfigured()) return { ...fixtureProfile };
+  if (!isDatabaseConfigured()) return getPublicProfile(fixtureProfile.slug, viewerId);
   await ensureSchema();
   const rows = await db()`
     select slug from tastemakers
@@ -151,13 +175,24 @@ export async function getPlaylistDestination(tastemakerId: string, viewerId: str
 export async function toggleFollow(userId: string, tastemakerId: string, following: boolean, acquisitionSource?: string | null) {
   await ensureSchema();
   if (following) {
-    await db()`
-      insert into follows (user_id, tastemaker_id, followed_at, unfollowed_at, acquisition_source)
-      values (${userId}, ${tastemakerId}, now(), null, ${acquisitionSource || null})
-      on conflict (user_id, tastemaker_id) do update set followed_at = now(), unfollowed_at = null, acquisition_source = coalesce(excluded.acquisition_source, follows.acquisition_source)
-    `;
+    await db().begin(async sql => {
+      const makers = await sql`
+        select id from tastemakers
+        where id = ${tastemakerId} and is_public = true and status in ('active', 'paused')
+        for share
+      `;
+      if (!makers[0]) throw new Error("TASTEMAKER_UNAVAILABLE");
+      await sql`
+        insert into follows (user_id, tastemaker_id, followed_at, unfollowed_at, acquisition_source)
+        values (${userId}, ${tastemakerId}, now(), null, ${acquisitionSource || null})
+        on conflict (user_id, tastemaker_id) do update set followed_at = now(), unfollowed_at = null, acquisition_source = coalesce(excluded.acquisition_source, follows.acquisition_source)
+      `;
+    });
   } else {
-    await db()`update follows set unfollowed_at = now() where user_id = ${userId} and tastemaker_id = ${tastemakerId} and unfollowed_at is null`;
+    await db().begin(async sql => {
+      await sql`update follows set unfollowed_at = now() where user_id = ${userId} and tastemaker_id = ${tastemakerId} and unfollowed_at is null`;
+      await sql`update telegram_subscriptions set active = false, unsubscribed_at = now(), updated_at = now() where user_id = ${userId} and tastemaker_id = ${tastemakerId} and active = true`;
+    });
   }
   const rows = await db()`select count(*)::int as count from follows where tastemaker_id = ${tastemakerId} and unfollowed_at is null`;
   return Number(rows[0]?.count || 0);

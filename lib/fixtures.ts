@@ -54,6 +54,9 @@ export const fixtureProfile: TastemakerProfile = {
   playlistTrackCount: 47,
   lastSyncAt: minutesAgo(3),
   viewerFollows: false,
+  historyAccess: "full",
+  totalEventCount30d: fixtureEvents.length,
+  telegram: { available: false, connected: false, subscribed: false },
   fixture: true,
   events: fixtureEvents
 };

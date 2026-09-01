@@ -5,14 +5,15 @@ import { Icon } from "@/components/Icons";
 import { ProfilePortrait } from "@/components/ProfilePortrait";
 import { getFeaturedPublicProfile } from "@/lib/server/repository";
 import { syncTastemakerFully } from "@/lib/server/sync";
+import { after } from "next/server";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  let featured = await getFeaturedPublicProfile(null);
+  const featured = await getFeaturedPublicProfile(null);
   if (featured && !featured.fixture && featured.status === "active" && featured.publishEnabled) {
-    await syncTastemakerFully(featured.id).catch(() => undefined);
-    featured = await getFeaturedPublicProfile(null);
+    const tastemakerId = featured.id;
+    after(() => syncTastemakerFully(tastemakerId).catch(() => undefined));
   }
   const liveHref = featured ? `/t/${featured.slug}` : "/about";
   const latest = featured?.events.slice(0, 3) || [];

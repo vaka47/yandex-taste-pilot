@@ -3,6 +3,17 @@ import { isConnectorConfigured } from "@/lib/server/config";
 
 type ConnectorErrorPayload = { detail?: string; code?: string };
 
+export async function connectorHealth() {
+  if (!isConnectorConfigured()) return false;
+  try {
+    const base = (process.env.MUSIC_CONNECTOR_INTERNAL_URL || "").replace(/\/$/, "");
+    const response = await fetch(`${base}/health`, { cache: "no-store", signal: AbortSignal.timeout(4_000) });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function connectorRequest<T>(path: string, body?: Record<string, unknown>): Promise<T> {
   if (!isConnectorConfigured()) throw new Error("MUSIC_CONNECTOR_DISABLED");
   const base = (process.env.MUSIC_CONNECTOR_INTERNAL_URL || "").replace(/\/$/, "");
@@ -22,4 +33,3 @@ export async function connectorRequest<T>(path: string, body?: Record<string, un
 
 export type DeviceChallenge = { deviceCode: string; userCode: string; verificationUrl: string; expiresIn: number; interval: number };
 export type DevicePoll = { status: "pending" | "connected"; accessToken?: string; refreshToken?: string | null; expiresIn?: number | null; account?: { id: string; login: string | null; displayName: string | null } };
-

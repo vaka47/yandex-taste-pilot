@@ -1,6 +1,6 @@
 import type { SVGProps } from "react";
 
-type IconName = "arrow" | "check" | "clock" | "copy" | "eye" | "heart" | "home" | "lock" | "music" | "pause" | "play" | "playlist" | "pulse" | "search" | "settings" | "share" | "shield" | "spark" | "sync" | "user" | "users" | "x";
+type IconName = "arrow" | "check" | "clock" | "copy" | "eye" | "heart" | "home" | "lock" | "music" | "pause" | "play" | "playlist" | "pulse" | "search" | "send" | "settings" | "share" | "shield" | "spark" | "sync" | "user" | "users" | "x";
 
 export function Icon({ name, size = 20, ...props }: SVGProps<SVGSVGElement> & { name: IconName; size?: number }) {
   const common = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
@@ -19,6 +19,7 @@ export function Icon({ name, size = 20, ...props }: SVGProps<SVGSVGElement> & { 
     playlist: <><path d="M4 6h10M4 11h10M4 16h6"/><path d="M18 10v8"/><circle cx="15" cy="18" r="3"/></>,
     pulse: <path d="M2 12h4l2.5-6 5 12 2.5-6h6"/>,
     search: <><circle cx="11" cy="11" r="7"/><path d="m16.5 16.5 4 4"/></>,
+    send: <><path d="m21 3-7.7 18-4.2-7.7L2 9.2 21 3Z"/><path d="m9.1 13.3 5.2-4.8"/></>,
     settings: <><circle cx="12" cy="12" r="3"/><path d="M19 13.5v-3l-2-.7a7 7 0 0 0-.8-1.9l.9-1.9-2.1-2.1-1.9.9a7 7 0 0 0-1.9-.8L10.5 2h-3l-.7 2a7 7 0 0 0-1.9.8L3 3.9.9 6l.9 1.9a7 7 0 0 0-.8 1.9l-2 .7v3l2 .7a7 7 0 0 0 .8 1.9L.9 18 3 20.1l1.9-.9a7 7 0 0 0 1.9.8l.7 2h3l.7-2a7 7 0 0 0 1.9-.8l1.9.9 2.1-2.1-.9-1.9a7 7 0 0 0 .8-1.9l2-.7Z" transform="translate(3) scale(.75)"/></>,
     share: <><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.5 10.5 7-4M8.5 13.5l7 4"/></>,
     shield: <><path d="M12 3 4 6v5c0 5 3.4 8.6 8 10 4.6-1.4 8-5 8-10V6l-8-3Z"/><path d="m8.5 12 2.2 2.2 4.8-5"/></>,
@@ -30,4 +31,3 @@ export function Icon({ name, size = 20, ...props }: SVGProps<SVGSVGElement> & { 
   };
   return <svg {...common} {...props}>{paths[name]}</svg>;
 }
-

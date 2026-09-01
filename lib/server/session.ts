@@ -7,11 +7,12 @@ import type { SessionUser } from "@/types/domain";
 
 const COOKIE = "taste_session";
 const SESSION_DAYS = 14;
+const OWNER_SESSION_HOURS = 8;
 
 export async function createSession(userId: string, authContext: "yandex" | "owner_password" = "yandex") {
   await ensureSchema();
   const token = randomToken();
-  const expiresAt = new Date(Date.now() + SESSION_DAYS * 86_400_000);
+  const expiresAt = new Date(Date.now() + (authContext === "owner_password" ? OWNER_SESSION_HOURS * 3_600_000 : SESSION_DAYS * 86_400_000));
   await db()`insert into sessions (token_hash, user_id, expires_at, auth_context) values (${hashToken(token)}, ${userId}, ${expiresAt}, ${authContext})`;
   const store = await cookies();
   store.set(COOKIE, token, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", expires: expiresAt });

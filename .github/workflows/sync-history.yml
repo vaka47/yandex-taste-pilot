@@ -2,7 +2,8 @@ name: Sync Yandex Music history
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    # Offset from the start of the hour, when GitHub Actions is under the highest load.
+    - cron: "2-57/5 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -24,4 +25,4 @@ jobs:
         run: >-
           curl --fail-with-body --silent --show-error --retry 2 --max-time 180
           -H "Authorization: Bearer ${CRON_SECRET}"
-          "${APP_URL}/api/cron/sync"
+          "${APP_URL}/api/cron/sync?source=github_schedule"

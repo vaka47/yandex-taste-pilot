@@ -18,7 +18,8 @@ export async function GET(request: NextRequest) {
   const verifier = randomToken(48);
   const follow = request.nextUrl.searchParams.get("follow");
   const invite = request.nextUrl.searchParams.get("invite");
-  const payload = encryptSecret(JSON.stringify({ state, verifier, returnTo, follow, invite, createdAt: Date.now() }));
+  const tastemaker = request.nextUrl.searchParams.get("tastemaker");
+  const payload = encryptSecret(JSON.stringify({ state, verifier, returnTo, follow, invite, tastemaker, createdAt: Date.now() }));
   const authorize = new URL("https://oauth.yandex.ru/authorize");
   authorize.searchParams.set("response_type", "code");
   authorize.searchParams.set("client_id", process.env.YANDEX_ID_CLIENT_ID || "");
@@ -29,7 +30,6 @@ export async function GET(request: NextRequest) {
   authorize.searchParams.set("code_challenge_method", "S256");
   const response = NextResponse.redirect(authorize);
   response.cookies.set("taste_oauth", payload, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/auth/yandex", maxAge: 600 });
-  await recordAnalytics({ eventName: "auth_started", tastemakerId: follow || null, properties: { returnTo, intent: invite ? "creator_invite" : follow ? "follow" : "login" } }).catch(() => undefined);
+  await recordAnalytics({ eventName: "auth_started", tastemakerId: follow || tastemaker || null, properties: { returnTo, intent: invite ? "creator_invite" : follow ? "follow" : tastemaker ? "history_unlock" : "login" } }).catch(() => undefined);
   return response;
 }
-

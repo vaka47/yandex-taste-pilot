@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import hashlib
 from typing import Any
 
 from yandex_music import Client
 
 from .base import ConnectionResult, DeviceChallenge, MusicHistoryProvider
+from .history_keys import occurrence_ranks_from_oldest, stable_event_key
 
 
 def _model_value(model: Any, name: str, default: Any = None) -> Any:
@@ -43,8 +43,7 @@ def _normalize_track(track: Any, day: str | None, position: int, occurrence_rank
     artist_ids = [str(_model_value(artist, "id")) for artist in artists if _model_value(artist, "id") is not None]
     # The list is newest-first and shifts whenever a new item arrives. Ranking repeated
     # track occurrences from the oldest end keeps earlier event keys stable across syncs.
-    source_key = f"{day or 'unknown'}:{track_id}:{album_id or ''}:{occurrence_rank}"
-    provider_event_key = hashlib.sha256(source_key.encode("utf-8")).hexdigest()
+    provider_event_key = stable_event_key(day, track_id, album_id, occurrence_rank)
     return {
         "providerEventKey": provider_event_key,
         "trackProviderId": str(track_id),
@@ -120,13 +119,10 @@ class YandexMusicProvider(MusicHistoryProvider):
             for track in client.tracks(list(dict.fromkeys(missing_refs))) or []:
                 resolved[str(_model_value(track, "id"))] = track
 
-        occurrence_ranks: dict[int, int] = {}
-        occurrence_counts: dict[tuple[str | None, str, str], int] = {}
-        for day, item_position, _, ids in reversed(entries):
-            track_id, album_id = ids
-            key = (day, str(track_id), str(album_id or ""))
-            occurrence_counts[key] = occurrence_counts.get(key, 0) + 1
-            occurrence_ranks[item_position] = occurrence_counts[key]
+        occurrence_ranks = occurrence_ranks_from_oldest(
+            (day, item_position, ids[0], ids[1])
+            for day, item_position, _, ids in entries
+        )
 
         normalized: list[dict[str, Any]] = []
         for day, item_position, model, ids in entries:

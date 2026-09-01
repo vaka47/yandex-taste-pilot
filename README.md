@@ -4,13 +4,13 @@ Production-oriented pilot for following the real, opt-in listening history of ta
 
 ## Implemented
 
-- public profile at `/t/[slug]` without login;
+- public profile at `/t/[slug]` with identity, aggregate activity and a protected-history teaser for an anonymous visitor; no track identity is returned before Yandex ID unlocks the full 30-day history, repeats and discoveries, and login never silently creates a follow;
 - Follow → official Yandex ID OAuth + PKCE → atomic pending-follow completion;
 - secure `HttpOnly` sessions and DB-backed roles;
 - one-use, seven-day creator invites issued only by the owner admin; successful registration burns every outstanding invite for that tastemaker, while ordinary Yandex ID sign-in always remains a fan account;
 - creator invite claim, consent, pause/resume, publication delay, hide track/artist, disconnect and deletion request;
 - creator-editable name, role line, bio and optional square avatar; avatar download is shown only to the authenticated owner on the public profile;
-- operational admin actions, sync/audit logs, per-tastemaker profile/follow/music/share analytics and CSV export;
+- operational admin actions, automation/sync/audit logs, per-tastemaker profile/auth/follow/music/Telegram/share analytics and CSV export;
 - tracked `/go/track/[id]` and `/go/playlist/[id]` redirects with an allowlisted Yandex destination;
 - PostgreSQL migration and idempotent schema bootstrap;
 - isolated FastAPI connector pinned to `yandex-music==3.0.0`;
@@ -19,12 +19,13 @@ Production-oriented pilot for following the real, opt-in listening history of ta
 - one chained history → latest-50 unique playlist sync through a dedicated service account, connected from the protected admin UI;
 - fastest publication by default: a 60-second sync preference, opportunistic checks when an active public profile or creator cabinet opens, and immediate playlist delivery after every successful history import; creators may switch to 5/15/60-minute checks;
 - cron leases, normalized provider errors and per-tastemaker failure isolation;
+- opt-in Telegram bot linking per followed tastemaker, at most one digest per Moscow calendar day per tastemaker, tracked playlist links, blocked-bot handling and delivery export;
 - responsive public, admin and creator interfaces, reduced-motion support and visible keyboard focus;
 - fixture mode for safe demos before accounts/secrets are connected.
 
 ## Important truth boundary
 
-Тейст не решает, после скольких секунд трек считается прослушанным. Яндекс Музыка сама формирует историю, а доступный неофициальный интерфейс не раскрывает ни порог в секундах, ни признак «дослушан до конца». Как только запись становится доступна в истории Яндекса, ближайшая проверка Тейста переносит её в профиль и живой плейлист. Интерфейс возвращает надёжные день и порядок записей, но не гарантирует точное время каждого прослушивания; поэтому коннектор передаёт `observedAt: null`, когда известны только день и порядок. Продукт не должен придумывать секундную точность.
+Тейст не решает, после скольких секунд трек считается прослушанным. Официальная справка Яндекс Музыки говорит, что история хранит треки, прослушанные до конца за последние 10 дней. Доступный коннектор не отдаёт процент, число секунд или событие на отметке 50%, поэтому Тейст не может самостоятельно принять пятисекундный или наполовину прослушанный трек. Как только запись становится доступна в истории Яндекса, ближайшая проверка Тейста переносит её в профиль и живой плейлист. Интерфейс возвращает надёжные день и порядок записей, но не гарантирует точное время каждого прослушивания; поэтому коннектор передаёт `observedAt: null`, когда известны только день и порядок. Продукт не должен придумывать секундную точность.
 
 `track_open_click` is **music intent**, not a stream. The product never claims playback started or finished.
 
@@ -72,7 +73,9 @@ The service-account Yandex Music token must belong to a dedicated pilot account�
 
 Create each celebrity from **Админка → Пригласить тейстмейкера**. This generates the only creator-registration path: a one-use invite URL that expires after seven days. After the creator uploads a profile photo, the owner can open that public profile from the admin dashboard, download the prepared square image, and upload it once as the corresponding playlist cover while signed in to the service account. Track updates remain automatic; cover upload is manual because the supported community connector does not expose a reliable playlist-cover mutation.
 
-On Vercel Hobby, one protected GitHub Actions workflow provides a five-minute background safety check—the minimum GitHub Actions cron interval. Active public profiles and the creator cabinet also request a safe opportunistic sync, while the default tastemaker preference is 60 seconds. This makes an already-visible active page refresh promptly, but it is not a real-time Yandex webhook: when nobody opens the product, the Hobby safety loop may take up to five minutes after Yandex exposes the history entry. Configure identical `CRON_SECRET` values in GitHub Actions and the web project, and set the GitHub `APP_URL` secret to the production origin. A one-minute external scheduler or Vercel Pro Cron can tighten the unattended interval later.
+On Vercel Hobby, the automation has three layers: an offset protected GitHub Actions cycle every five minutes, an independent hourly watchdog, and one daily Vercel Cron recovery cycle. Active public profiles and the creator cabinet also request a safe post-response sync, while the default tastemaker preference is 60 seconds. This is still not a real-time Yandex webhook: GitHub explicitly does not guarantee exact scheduled start time, and Hobby cannot run Vercel Cron every minute. For a large celebrity test, use Vercel Pro Cron or another production scheduler with one-minute execution, while keeping the watchdog. Configure identical `CRON_SECRET` values in GitHub Actions and the web project, and set the GitHub `APP_URL` secret to the production origin.
+
+For Telegram digests, create a bot in BotFather and set `TELEGRAM_NOTIFICATIONS_ENABLED=true`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME` and a random `TELEGRAM_WEBHOOK_SECRET`. Then open **Админка → Система** and run **Обновить Telegram-вебхук**. A fan must first sign in with Yandex ID and follow the tastemaker; Telegram linking is voluntary and per tastemaker. `/stop` disables all bot notifications. The system never sends more than one digest per tastemaker per Moscow calendar day, and only after that tastemaker's public playlist has caught up with the new stored history.
 
 ## Required external setup before a real account test
 
@@ -83,6 +86,7 @@ On Vercel Hobby, one protected GitHub Actions workflow provides a five-minute ba
 - dedicated Yandex Music service account authorized in the protected admin UI;
 - a disposable/test tastemaker Yandex Music account;
 - production privacy/deletion email and approved creator consent copy.
+- Telegram bot credentials and webhook setup if the notification experiment is enabled.
 
 ## Verification
 

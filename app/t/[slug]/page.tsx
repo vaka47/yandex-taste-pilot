@@ -5,6 +5,7 @@ import { getPublicProfile } from "@/lib/server/repository";
 import { getSessionUser } from "@/lib/server/session";
 import { isAdminYandexId } from "@/lib/server/config";
 import { syncTastemakerFully } from "@/lib/server/sync";
+import { after } from "next/server";
 
 export const dynamic = "force-dynamic";
 
@@ -18,8 +19,8 @@ export default async function TastemakerPage({ params }: { params: Promise<{ slu
   }
   if (!profile) notFound();
   if (!profile.fixture && profile.status === "active" && profile.publishEnabled) {
-    await syncTastemakerFully(profile.id).catch(() => undefined);
-    profile = await getPublicProfile(slug, session?.id || null) || profile;
+    const tastemakerId = profile.id;
+    after(() => syncTastemakerFully(tastemakerId).catch(() => undefined));
   }
   return (
     <div className="publicShell">

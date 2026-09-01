@@ -8,7 +8,7 @@ import { toggleFollow } from "@/lib/server/repository";
 import { recordAnalytics } from "@/lib/server/analytics";
 import { audit } from "@/lib/server/audit";
 
-type OAuthState = { state: string; verifier: string; returnTo: string; follow?: string | null; invite?: string | null; createdAt: number };
+type OAuthState = { state: string; verifier: string; returnTo: string; follow?: string | null; invite?: string | null; tastemaker?: string | null; createdAt: number };
 
 export async function GET(request: NextRequest) {
   const cookieValue = request.cookies.get("taste_oauth")?.value;
@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
     const accessToken = await exchangeYandexCode(code, saved.verifier);
     const yandexProfile = await fetchYandexProfile(accessToken);
     const user = await upsertYandexUser(yandexProfile);
+    const analyticsUser = { id: user.id, role: user.role as "user" | "creator" | "admin", displayName: user.displayName, avatarUrl: null, yandexId: user.yandexId, authContext: "yandex" as const };
 
     if (saved.invite) {
       await ensureSchema();
@@ -46,11 +47,11 @@ export async function GET(request: NextRequest) {
 
     if (saved.follow) {
       await toggleFollow(user.id, saved.follow, true, "oauth_continuation");
-      await recordAnalytics({ eventName: "follow_completed", tastemakerId: saved.follow, properties: { continuation: true } });
+      await recordAnalytics({ eventName: "follow_completed", user: analyticsUser, tastemakerId: saved.follow, properties: { continuation: true } });
       const separator = target.includes("?") ? "&" : "?";
       target = `${target}${separator}follow=completed`;
     }
-    await recordAnalytics({ eventName: "auth_completed", user: { id: user.id, role: user.role as "user" | "creator" | "admin", displayName: user.displayName, avatarUrl: null, yandexId: user.yandexId, authContext: "yandex" }, tastemakerId: saved.follow || null });
+    await recordAnalytics({ eventName: "auth_completed", user: analyticsUser, tastemakerId: saved.follow || saved.tastemaker || null, properties: { intent: saved.invite ? "creator_invite" : saved.follow ? "follow" : saved.tastemaker ? "history_unlock" : "login" } });
     await createSession(user.id);
     const response = NextResponse.redirect(new URL(target, appUrl()));
     response.cookies.delete("taste_oauth");

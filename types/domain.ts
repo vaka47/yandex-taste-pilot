@@ -43,6 +43,13 @@ export type TastemakerProfile = {
   playlistTrackCount: number;
   lastSyncAt: string | null;
   viewerFollows: boolean;
+  historyAccess: "teaser" | "full";
+  totalEventCount30d: number;
+  telegram: {
+    available: boolean;
+    connected: boolean;
+    subscribed: boolean;
+  };
   fixture: boolean;
   events: ListeningEvent[];
 };

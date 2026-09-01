@@ -8,7 +8,7 @@
     "start": "next start",
     "migrate": "node scripts/migrate.mjs",
     "lint": "tsc --noEmit",
-    "check:python": "python3 -m compileall -q music-connector/app",
+    "check:python": "python3 -m compileall -q music-connector/app music-connector/tests && python3 -m unittest discover -s music-connector/tests",
     "check": "npm run lint && npm run check:python && npm run build"
   },
   "dependencies": {
