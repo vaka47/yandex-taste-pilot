@@ -39,7 +39,7 @@ export function HomeDiscoveryClient({ profiles, activity }: { profiles: HomeTast
         <div className="landingCopy">
           <span className="landingKicker"><i /> музыка людей, которым вы верите</span>
           <h1><span className="landingTitleLead">Слушай мир</span><em>чужими ушами</em></h1>
-          <p>Живая музыкальная история людей, чьему вкусу вы доверяете</p>
+          <p><span className="landingDescriptionLine">Живая музыкальная история людей,</span>{" "}<span className="landingDescriptionLine">чьему вкусу вы доверяете</span></p>
           <div className="landingHeroActions"><a className="landingPrimary" href="#discover"><Icon name="search" />Найти Саундмейкера</a><Link className="landingSecondary" href="/about">Как это устроено <Icon name="arrow" /></Link></div>
         </div>
         <div className="landingVisual" onPointerEnter={() => setPaused(true)} onPointerLeave={() => setPaused(false)} onPointerDown={event => { pointerStart.current = event.clientX; }} onPointerUp={event => endSwipe(event.clientX)}>

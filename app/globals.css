@@ -732,6 +732,7 @@ summary:active {
   .landingCopy { padding: 54px clamp(46px,5vw,74px) 48px clamp(26px,2vw,38px); }
   .landingCopy h1 { margin: 22px 0 18px; font-size: clamp(70px,7.2vw,112px); line-height: .88; }
   .landingTitleLead { display: block; width: max-content; max-width: 100%; white-space: nowrap; font-size: clamp(52px,4.4vw,82px); line-height: .96; }
+  .landingDescriptionLine { display: block; }
   .landingCopy > p { margin: 12px 0; }
 }
 
