@@ -8,7 +8,7 @@ import { audit } from "@/lib/server/audit";
 import { deleteTastemakerPlaylist, syncTastemakerFully, syncTastemakerPlaylist } from "@/lib/server/sync";
 import { dispatchDailyTelegramNotifications, setupTelegramWebhook } from "@/lib/server/telegram";
 
-const allowed = new Set(["pause", "sync", "playlist_rebuild", "create_tastemaker", "create_invite", "archive", "delete_tastemaker", "setup_telegram"]);
+const allowed = new Set(["pause", "sync", "playlist_rebuild", "create_tastemaker", "create_invite", "update_tastemaker_intro", "archive", "delete_tastemaker", "setup_telegram"]);
 
 export async function POST(request: NextRequest) {
   if (!sameOrigin(request)) return NextResponse.json({ error: "INVALID_ORIGIN" }, { status: 403 });
@@ -34,12 +34,22 @@ export async function POST(request: NextRequest) {
       const normalizedSlug = body.slug.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
       if (normalizedSlug.length < 3) return NextResponse.json({ error: "INVALID_SLUG" }, { status: 400 });
       const selectedGender = ["male", "female", "neutral"].includes(body.gender || "") ? body.gender! : "neutral";
-      const created = await db()`insert into tastemakers (name, slug, gender, role_line, status, publication_delay_seconds, sync_interval_seconds) values (${body.name.trim().slice(0, 100)}, ${normalizedSlug}, ${selectedGender}, ${body.roleLine?.trim().slice(0, 120) || "Саундмейкер"}, 'draft', 0, 60) returning id, slug`;
+      const roleLine = body.roleLine?.trim().replace(/\s+/g, " ") || "";
+      if (roleLine.length < 2 || roleLine.length > 120) return NextResponse.json({ error: "INTRO_REQUIRED" }, { status: 400 });
+      const created = await db()`insert into tastemakers (name, slug, gender, role_line, status, publication_delay_seconds, sync_interval_seconds) values (${body.name.trim().slice(0, 100)}, ${normalizedSlug}, ${selectedGender}, ${roleLine}, 'draft', 0, 60) returning id, slug`;
       const rawToken = randomToken(32);
       await db()`insert into creator_invites (tastemaker_id, token_hash, expires_at, created_by) values (${created[0].id}, ${hashToken(rawToken)}, now() + interval '7 days', ${admin.id})`;
       await db()`update tastemakers set status = 'invited', updated_at = now() where id = ${created[0].id}`;
       await audit(admin.id, "tastemaker_created", "tastemaker", created[0].id);
       return NextResponse.json({ ok: true, id: created[0].id, slug: created[0].slug, inviteUrl: `${appUrl()}/invite/${rawToken}` }, { status: 201 });
+    }
+    if (body.type === "update_tastemaker_intro" && body.tastemakerId) {
+      const roleLine = body.roleLine?.trim().replace(/\s+/g, " ") || "";
+      if (roleLine.length < 2 || roleLine.length > 120) return NextResponse.json({ error: "INVALID_INTRO" }, { status: 400 });
+      const rows = await db()`update tastemakers set role_line = ${roleLine}, updated_at = now() where id = ${body.tastemakerId} and status <> 'archived' returning id, role_line`;
+      if (!rows[0]) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+      await audit(admin.id, "admin_tastemaker_intro_updated", "tastemaker", body.tastemakerId, { roleLine });
+      return NextResponse.json({ ok: true, roleLine: String(rows[0].role_line) });
     }
     if (body.type === "create_invite" && body.tastemakerId) {
       const tastemakerId = body.tastemakerId;

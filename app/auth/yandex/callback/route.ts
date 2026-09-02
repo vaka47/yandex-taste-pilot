@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
         return invites[0].tastemaker_id as string;
       });
       await audit(user.id, "creator_invite_claimed", "tastemaker", claimed);
-      target = "/creator";
+      target = "/creator?onboarding=music";
     }
 
     if (saved.follow) {

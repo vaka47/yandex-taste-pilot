@@ -10,6 +10,7 @@ export type AdminTastemakerRow = {
   slug: string;
   name: string;
   gender: TastemakerGender;
+  roleLine: string;
   avatarUrl: string | null;
   status: TastemakerStatus;
   registered: boolean;
@@ -148,7 +149,7 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
   await ensureSchema();
   const [makers, analytics, failures, audits, serviceConnections, telegramRows, retentionRows, globalRetentionRows, followerRetentionRows, automation, connectorOnline] = await Promise.all([
     db()`
-      select t.id, t.slug, t.name, t.gender, t.avatar_url, t.status, (t.owner_user_id is not null) as registered,
+      select t.id, t.slug, t.name, t.gender, t.role_line, t.avatar_url, t.status, (t.owner_user_id is not null) as registered,
         coalesce(f.follower_count, 0)::int as follower_count,
         coalesce(a.profile_views_7d, 0)::int as profile_views_7d,
         coalesce(a.unique_visitors_7d, 0)::int as unique_visitors_7d,
@@ -334,7 +335,7 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
       const retention = retentionByTastemaker.get(String(row.id));
       const followerRetention = followerRetentionByTastemaker.get(String(row.id));
       return {
-        id: String(row.id), slug: String(row.slug), name: String(row.name), gender: row.gender === "male" || row.gender === "female" ? row.gender : "neutral", avatarUrl: row.avatar_url ? String(row.avatar_url) : null, status: row.status, registered: Boolean(row.registered),
+        id: String(row.id), slug: String(row.slug), name: String(row.name), gender: row.gender === "male" || row.gender === "female" ? row.gender : "neutral", roleLine: String(row.role_line || "Саундмейкер"), avatarUrl: row.avatar_url ? String(row.avatar_url) : null, status: row.status, registered: Boolean(row.registered),
         followerCount: Number(row.follower_count || 0), profileViews7d: Number(row.profile_views_7d || 0), uniqueVisitors7d: Number(row.unique_visitors_7d || 0),
         historyUnlocks7d: Number(row.history_unlocks_7d || 0), authCompletions7d: Number(row.auth_completions_7d || 0),
         followClicks7d: Number(row.follow_clicks_7d || 0), follows7d: Number(row.follows_7d || 0), trackOpens7d: Number(row.track_opens_7d || 0),
