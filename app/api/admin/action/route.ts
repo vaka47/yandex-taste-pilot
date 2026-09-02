@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
   if (!sameOrigin(request)) return NextResponse.json({ error: "INVALID_ORIGIN" }, { status: 403 });
   let admin;
   try { admin = await requireRole("admin"); } catch { return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 }); }
-  const body = await request.json().catch(() => ({})) as { type?: string; tastemakerId?: string; name?: string; slug?: string; roleLine?: string; confirmName?: string };
+  const body = await request.json().catch(() => ({})) as { type?: string; tastemakerId?: string; name?: string; slug?: string; roleLine?: string; gender?: string; confirmName?: string };
   if (!body.type || !allowed.has(body.type)) return NextResponse.json({ error: "ACTION_NOT_ALLOWED" }, { status: 400 });
   await ensureSchema();
   try {
@@ -33,7 +33,8 @@ export async function POST(request: NextRequest) {
       if (!body.name || !body.slug) return NextResponse.json({ error: "NAME_AND_SLUG_REQUIRED" }, { status: 400 });
       const normalizedSlug = body.slug.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
       if (normalizedSlug.length < 3) return NextResponse.json({ error: "INVALID_SLUG" }, { status: 400 });
-      const created = await db()`insert into tastemakers (name, slug, role_line, status, publication_delay_seconds, sync_interval_seconds) values (${body.name.trim().slice(0, 100)}, ${normalizedSlug}, ${body.roleLine?.trim().slice(0, 120) || "автор вкуса"}, 'draft', 0, 60) returning id, slug`;
+      const selectedGender = ["male", "female", "neutral"].includes(body.gender || "") ? body.gender! : "neutral";
+      const created = await db()`insert into tastemakers (name, slug, gender, role_line, status, publication_delay_seconds, sync_interval_seconds) values (${body.name.trim().slice(0, 100)}, ${normalizedSlug}, ${selectedGender}, ${body.roleLine?.trim().slice(0, 120) || "Саундмейкер"}, 'draft', 0, 60) returning id, slug`;
       const rawToken = randomToken(32);
       await db()`insert into creator_invites (tastemaker_id, token_hash, expires_at, created_by) values (${created[0].id}, ${hashToken(rawToken)}, now() + interval '7 days', ${admin.id})`;
       await db()`update tastemakers set status = 'invited', updated_at = now() where id = ${created[0].id}`;

@@ -40,7 +40,8 @@ export const fixtureEvents: ListeningEvent[] = [
 export const fixtureProfile: TastemakerProfile = {
   id: "10000000-0000-4000-8000-000000000001",
   slug: "safonov-ivan",
-  name: "Сафонов Иван",
+  name: "Иван Сафонов",
+  gender: "male",
   bio: "Музыка, к которой я возвращаюсь сам — без редакторской подборки и чужих рекомендаций.",
   roleLine: "автор",
   avatarUrl: null,

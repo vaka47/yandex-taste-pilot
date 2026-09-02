@@ -2,7 +2,11 @@ import "server-only";
 import { fixtureProfile } from "@/lib/fixtures";
 import { db, ensureSchema, isDatabaseConfigured } from "@/lib/server/db";
 import { fixturesEnabled, telegramNotificationsConfigured } from "@/lib/server/config";
-import type { HomeTastemaker, ListeningEvent, PublicActivity, TastemakerProfile } from "@/types/domain";
+import type { HomeTastemaker, ListeningEvent, PublicActivity, TastemakerGender, TastemakerProfile } from "@/types/domain";
+
+function gender(value: unknown): TastemakerGender {
+  return value === "male" || value === "female" ? value : "neutral";
+}
 
 function rowToEvent(row: Record<string, any>): ListeningEvent {
   return {
@@ -121,7 +125,7 @@ export async function getPublicProfile(slug: string, viewerId: string | null): P
     limit ${viewerId ? 80 : 3}
   `;
   return {
-    id: row.id, slug: row.slug, name: row.name, bio: row.bio, roleLine: row.role_line,
+    id: row.id, slug: row.slug, name: row.name, gender: gender(row.gender), bio: row.bio, roleLine: row.role_line,
     avatarUrl: row.avatar_url, verified: row.verified, status: row.status, isPublic: row.is_public,
     publishEnabled: row.publish_enabled, publicationDelaySeconds: row.publication_delay_seconds,
     followerCount: Number(row.follower_count), playlistUrl: row.playlist_url,
@@ -166,14 +170,13 @@ export async function getPublicEvent(eventId: string) {
   return rows[0] ? { event: rowToEvent(rows[0]), tastemakerId: rows[0].tastemaker_id as string } : null;
 }
 
-export async function getPlaylistDestination(tastemakerId: string, viewerId: string) {
+export async function getPlaylistDestination(tastemakerId: string) {
   if (!isDatabaseConfigured()) return fixturesEnabled() && tastemakerId === fixtureProfile.id ? fixtureProfile.playlistUrl : null;
   await ensureSchema();
   const rows = await db()`
     select p.public_url from playlists p
     join tastemakers t on t.id = p.tastemaker_id and t.is_public = true
-    join follows f on f.tastemaker_id = t.id and f.user_id = ${viewerId} and f.unfollowed_at is null
-    where p.tastemaker_id = ${tastemakerId}
+    where p.tastemaker_id = ${tastemakerId} and t.status in ('active', 'paused')
     limit 1
   `;
   return (rows[0]?.public_url as string | undefined) || null;
@@ -248,15 +251,17 @@ export async function getHomeDiscoveryData(): Promise<{ profiles: HomeTastemaker
         id: fixtureProfile.id,
         slug: fixtureProfile.slug,
         name: fixtureProfile.name,
+        gender: fixtureProfile.gender,
         roleLine: fixtureProfile.roleLine,
         avatarUrl: fixtureProfile.avatarUrl,
-        latestTrack: event ? { title: event.track.title, artists: event.track.artists } : null,
+        latestTrack: event ? { id: event.id, title: event.track.title, artists: event.track.artists, coverUrl: event.track.coverUrl } : null,
         updatedAt: event?.observedAt || event?.fetchedAt || null
       }],
       activity: event ? [{
         id: event.id,
         kind: "listen",
         tastemakerName: fixtureProfile.name,
+        tastemakerGender: fixtureProfile.gender,
         tastemakerSlug: fixtureProfile.slug,
         trackTitle: event.track.title,
         artists: event.track.artists,
@@ -269,12 +274,12 @@ export async function getHomeDiscoveryData(): Promise<{ profiles: HomeTastemaker
   await ensureSchema();
   const [profileRows, listenRows, commentRows] = await Promise.all([
     db()`
-      select t.id, t.slug, t.name, t.role_line, t.avatar_url,
-        e.track_title, e.artist_names,
+      select t.id, t.slug, t.name, t.gender, t.role_line, t.avatar_url,
+        e.id as event_id, e.track_title, e.artist_names, e.cover_url,
         coalesce(e.observed_at, e.fetched_at) as latest_at
       from tastemakers t
       left join lateral (
-        select track_title, artist_names, observed_at, fetched_at
+        select id, track_title, artist_names, cover_url, observed_at, fetched_at
         from listening_events
         where tastemaker_id = t.id and visibility = 'public' and publish_at <= now()
         order by coalesce(observed_at, fetched_at) desc
@@ -284,7 +289,7 @@ export async function getHomeDiscoveryData(): Promise<{ profiles: HomeTastemaker
       order by verified desc, coalesce(e.observed_at, e.fetched_at, t.updated_at) desc
     `,
     db()`
-      select e.id, e.track_title, e.artist_names, t.name, t.slug,
+      select e.id, e.track_title, e.artist_names, t.name, t.slug, t.gender,
         coalesce(e.observed_at, e.fetched_at) as occurred_at
       from listening_events e
       join tastemakers t on t.id = e.tastemaker_id and t.is_public = true and t.status = 'active'
@@ -294,7 +299,7 @@ export async function getHomeDiscoveryData(): Promise<{ profiles: HomeTastemaker
     `,
     db()`
       select ec.id, ec.body, ec.updated_at as occurred_at, e.id as event_id,
-        e.track_title, e.artist_names, t.name, t.slug
+        e.track_title, e.artist_names, t.name, t.slug, t.gender
       from event_comments ec
       join listening_events e on e.id = ec.listening_event_id and e.visibility = 'public' and e.publish_at <= now()
       join tastemakers t on t.id = ec.tastemaker_id and t.is_public = true and t.status = 'active'
@@ -307,9 +312,10 @@ export async function getHomeDiscoveryData(): Promise<{ profiles: HomeTastemaker
     id: String(row.id),
     slug: String(row.slug),
     name: String(row.name),
+    gender: gender(row.gender),
     roleLine: String(row.role_line),
     avatarUrl: row.avatar_url ? String(row.avatar_url) : null,
-    latestTrack: row.track_title ? { title: String(row.track_title), artists: Array.isArray(row.artist_names) ? row.artist_names.map(String) : [] } : null,
+    latestTrack: row.track_title ? { id: String(row.event_id), title: String(row.track_title), artists: Array.isArray(row.artist_names) ? row.artist_names.map(String) : [], coverUrl: row.cover_url ? String(row.cover_url) : null } : null,
     updatedAt: row.latest_at?.toISOString?.() || (row.latest_at ? String(row.latest_at) : null)
   }));
   const activity: PublicActivity[] = [
@@ -317,6 +323,7 @@ export async function getHomeDiscoveryData(): Promise<{ profiles: HomeTastemaker
       id: `listen-${String(row.id)}`,
       kind: "listen" as const,
       tastemakerName: String(row.name),
+      tastemakerGender: gender(row.gender),
       tastemakerSlug: String(row.slug),
       trackTitle: String(row.track_title),
       artists: Array.isArray(row.artist_names) ? row.artist_names.map(String) : [],
@@ -328,6 +335,7 @@ export async function getHomeDiscoveryData(): Promise<{ profiles: HomeTastemaker
       id: `comment-${String(row.id)}`,
       kind: "comment" as const,
       tastemakerName: String(row.name),
+      tastemakerGender: gender(row.gender),
       tastemakerSlug: String(row.slug),
       trackTitle: String(row.track_title),
       artists: Array.isArray(row.artist_names) ? row.artist_names.map(String) : [],

@@ -20,7 +20,7 @@ create index if not exists sessions_user_idx on sessions(user_id, expires_at des
 
 create table if not exists tastemakers (
   id uuid primary key default gen_random_uuid(), owner_user_id uuid references users(id) on delete set null,
-  name text not null, slug text not null unique, bio text not null default '', role_line text not null default 'автор вкуса',
+  name text not null, slug text not null unique, gender text not null default 'neutral' check (gender in ('male','female','neutral')), bio text not null default '', role_line text not null default 'Саундмейкер',
   avatar_url text, verified boolean not null default false,
   status text not null default 'draft' check (status in ('draft','invited','connected','active','paused','disconnected','archived')),
   is_public boolean not null default false, publish_enabled boolean not null default false,
@@ -131,7 +131,7 @@ create table if not exists admin_login_attempts (
   attempted_at timestamptz not null default now()
 );
 create index if not exists admin_login_attempts_key_idx on admin_login_attempts(client_key, attempted_at desc);
-update tastemakers set name = 'Сафонов Иван', updated_at = now() where name = 'Пилотный автор';
+update tastemakers set name = 'Иван Сафонов', gender = 'male', updated_at = now() where name in ('Пилотный автор', 'Сафонов Иван');
 update tastemakers t set slug = 'safonov-ivan', updated_at = now()
 where t.slug = 'pilot-author'
   and not exists (select 1 from tastemakers existing where existing.slug = 'safonov-ivan' and existing.id <> t.id);

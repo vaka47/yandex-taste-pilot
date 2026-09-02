@@ -7,7 +7,7 @@ import { sameOrigin } from "@/lib/server/security";
 async function mutate(request: NextRequest, context: { params: Promise<{ id: string }> }, following: boolean) {
   if (!sameOrigin(request)) return NextResponse.json({ error: "INVALID_ORIGIN" }, { status: 403 });
   const user = await getSessionUser();
-  if (!user || user.authContext !== "yandex") return NextResponse.json({ error: "YANDEX_ID_REQUIRED" }, { status: 401 });
+  if (!user) return NextResponse.json({ error: "YANDEX_ID_REQUIRED" }, { status: 401 });
   const { id } = await context.params;
   try {
     const followerCount = await toggleFollow(user.id, id, following, request.cookies.get("taste_first_source")?.value || null);

@@ -8,6 +8,8 @@ import { dispatchCreatorCommentNotifications } from "@/lib/server/telegram";
 
 const allowed = new Set(["pause", "resume", "publish_enabled", "delay", "sync_interval", "hide_event", "restore_event", "hide_artist", "restore_artist", "comment_event", "delete_comment", "sync_now", "playlist_sync", "disconnect"]);
 
+export const maxDuration = 60;
+
 export async function POST(request: NextRequest) {
   if (!sameOrigin(request)) return NextResponse.json({ error: "INVALID_ORIGIN" }, { status: 403 });
   let creator;

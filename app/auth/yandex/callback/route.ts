@@ -14,11 +14,11 @@ export async function GET(request: NextRequest) {
   const cookieValue = request.cookies.get("taste_oauth")?.value;
   const code = request.nextUrl.searchParams.get("code");
   const state = request.nextUrl.searchParams.get("state");
-  let target = "/following";
+  let target = "/";
   try {
     if (!cookieValue || !code || !state) throw new Error("OAUTH_RESPONSE_INCOMPLETE");
     const saved = JSON.parse(decryptSecret(cookieValue)) as OAuthState;
-    target = saved.returnTo.startsWith("/") && !saved.returnTo.startsWith("//") ? saved.returnTo : "/following";
+    target = saved.returnTo.startsWith("/") && !saved.returnTo.startsWith("//") ? saved.returnTo : "/";
     if (saved.state !== state || Date.now() - saved.createdAt > 600_000) throw new Error("OAUTH_STATE_INVALID");
     const accessToken = await exchangeYandexCode(code, saved.verifier);
     const yandexProfile = await fetchYandexProfile(accessToken);
@@ -46,10 +46,14 @@ export async function GET(request: NextRequest) {
     }
 
     if (saved.follow) {
+      await ensureSchema();
+      const existingFollow = await db()`select id from follows where user_id = ${user.id} and tastemaker_id = ${saved.follow} and unfollowed_at is null limit 1`;
       await toggleFollow(user.id, saved.follow, true, "oauth_continuation");
-      await recordAnalytics({ eventName: "follow_completed", user: analyticsUser, tastemakerId: saved.follow, properties: { continuation: true } });
-      const separator = target.includes("?") ? "&" : "?";
-      target = `${target}${separator}follow=completed`;
+      if (!existingFollow[0]) {
+        await recordAnalytics({ eventName: "follow_completed", user: analyticsUser, tastemakerId: saved.follow, properties: { continuation: true } });
+        const separator = target.includes("?") ? "&" : "?";
+        target = `${target}${separator}follow=completed`;
+      }
     }
     await recordAnalytics({ eventName: "auth_completed", user: analyticsUser, tastemakerId: saved.follow || saved.tastemaker || null, properties: { intent: saved.invite ? "creator_invite" : saved.follow ? "follow" : saved.tastemaker ? "history_unlock" : "login" } });
     await createSession(user.id);

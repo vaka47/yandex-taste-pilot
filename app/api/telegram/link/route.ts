@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createTelegramLink, disableTelegramSubscription, getTelegramSubscriptionStatus } from "@/lib/server/telegram";
 import { requireUser } from "@/lib/server/session";
 import { sameOrigin } from "@/lib/server/security";
+import { recordAnalytics } from "@/lib/server/analytics";
 
 async function userOrResponse() {
   try {
     const user = await requireUser();
-    if (user.authContext !== "yandex") throw new Error("YANDEX_ID_REQUIRED");
     return user;
   } catch {
     return null;
@@ -28,7 +28,16 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({})) as { tastemakerId?: string };
   if (!body.tastemakerId) return NextResponse.json({ error: "TASTEMAKER_REQUIRED" }, { status: 400 });
   try {
-    return NextResponse.json(await createTelegramLink(user.id, body.tastemakerId));
+    const result = await createTelegramLink(user.id, body.tastemakerId);
+    if (result.subscribed) {
+      await recordAnalytics({
+        eventName: "telegram_connected",
+        user,
+        tastemakerId: body.tastemakerId,
+        properties: { existingAccount: true }
+      });
+    }
+    return NextResponse.json(result);
   } catch (error) {
     const code = error instanceof Error ? error.message : "TELEGRAM_LINK_FAILED";
     return NextResponse.json({ error: code }, { status: code === "FOLLOW_REQUIRED" ? 409 : code === "TELEGRAM_NOT_CONFIGURED" ? 503 : 500 });

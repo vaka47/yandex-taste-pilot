@@ -1,6 +1,7 @@
 export type Role = "user" | "creator" | "admin";
 export type TastemakerStatus = "draft" | "invited" | "connected" | "active" | "paused" | "disconnected" | "archived";
 export type EventVisibility = "public" | "hidden" | "pending";
+export type TastemakerGender = "male" | "female" | "neutral";
 
 export type Track = {
   id: string;
@@ -35,9 +36,10 @@ export type HomeTastemaker = {
   id: string;
   slug: string;
   name: string;
+  gender: TastemakerGender;
   roleLine: string;
   avatarUrl: string | null;
-  latestTrack: { title: string; artists: string[] } | null;
+  latestTrack: { id: string; title: string; artists: string[]; coverUrl: string | null } | null;
   updatedAt: string | null;
 };
 
@@ -45,6 +47,7 @@ export type PublicActivity = {
   id: string;
   kind: "listen" | "comment";
   tastemakerName: string;
+  tastemakerGender: TastemakerGender;
   tastemakerSlug: string;
   trackTitle: string;
   artists: string[];
@@ -57,6 +60,7 @@ export type TastemakerProfile = {
   id: string;
   slug: string;
   name: string;
+  gender: TastemakerGender;
   bio: string;
   roleLine: string;
   avatarUrl: string | null;

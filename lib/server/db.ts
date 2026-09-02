@@ -70,8 +70,9 @@ async function createSchema() {
       owner_user_id uuid references users(id) on delete set null,
       name text not null,
       slug text not null unique,
+      gender text not null default 'neutral' check (gender in ('male','female','neutral')),
       bio text not null default '',
-      role_line text not null default 'автор вкуса',
+      role_line text not null default 'Саундмейкер',
       avatar_url text,
       verified boolean not null default false,
       status text not null default 'draft' check (status in ('draft','invited','connected','active','paused','disconnected','archived')),
@@ -393,6 +394,7 @@ async function createSchema() {
   `;
   await sql`alter table sessions add column if not exists auth_context text not null default 'yandex'`;
   await sql`alter table tastemakers add column if not exists sync_interval_seconds integer not null default 60`;
+  await sql`alter table tastemakers add column if not exists gender text not null default 'neutral'`;
   await sql`alter table tastemakers alter column publication_delay_seconds set default 0`;
   await sql`create table if not exists schema_migrations (version text primary key, applied_at timestamptz not null default now())`;
   await sql.begin(async transaction => {
@@ -411,7 +413,7 @@ async function createSchema() {
     )
   `;
   await sql`create index if not exists admin_login_attempts_key_idx on admin_login_attempts(client_key, attempted_at desc)`;
-  await sql`update tastemakers set name = 'Сафонов Иван', updated_at = now() where name = 'Пилотный автор'`;
+  await sql`update tastemakers set name = 'Иван Сафонов', gender = 'male', updated_at = now() where name in ('Пилотный автор', 'Сафонов Иван') or slug = 'safonov-ivan'`;
   await sql`
     update tastemakers t set slug = 'safonov-ivan', updated_at = now()
     where t.slug = 'pilot-author'

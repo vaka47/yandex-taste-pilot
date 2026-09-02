@@ -46,6 +46,15 @@ async function sendMessage(chatId: string, text: string, button?: { label: strin
   });
 }
 
+function moscowHour(now = new Date()) {
+  const hour = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Moscow",
+    hour: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(now).find(part => part.type === "hour")?.value;
+  return Number(hour ?? -1);
+}
+
 export async function setupTelegramWebhook() {
   if (!telegramNotificationsConfigured()) throw new Error("TELEGRAM_NOT_CONFIGURED");
   return telegramRequest<boolean>("setWebhook", {
@@ -75,6 +84,20 @@ export async function createTelegramLink(userId: string, tastemakerId: string) {
     limit 1
   `;
   if (!eligible[0]) throw new Error("FOLLOW_REQUIRED");
+  const connected = await db()`
+    select user_id from telegram_accounts
+    where user_id = ${userId} and status = 'active'
+    limit 1
+  `;
+  if (connected[0]) {
+    await db()`
+      insert into telegram_subscriptions (user_id, tastemaker_id, active, subscribed_at, unsubscribed_at)
+      values (${userId}, ${tastemakerId}, true, now(), null)
+      on conflict (user_id, tastemaker_id) do update
+      set active = true, subscribed_at = now(), unsubscribed_at = null, updated_at = now()
+    `;
+    return { subscribed: true, connected: true, expiresInSeconds: 0 };
+  }
   const rawToken = randomToken(24);
   await db().begin(async sql => {
     await sql`update telegram_link_tokens set used_at = now() where user_id = ${userId} and tastemaker_id = ${tastemakerId} and used_at is null`;
@@ -83,7 +106,7 @@ export async function createTelegramLink(userId: string, tastemakerId: string) {
       values (${hashToken(rawToken)}, ${userId}, ${tastemakerId}, now() + interval '15 minutes')
     `;
   });
-  return { url: `https://t.me/${botUsername()}?start=${rawToken}`, expiresInSeconds: 900 };
+  return { subscribed: false, connected: false, url: `https://t.me/${botUsername()}?start=${rawToken}`, expiresInSeconds: 900 };
 }
 
 export async function getTelegramSubscriptionStatus(userId: string, tastemakerId: string) {
@@ -148,7 +171,7 @@ async function consumeStartToken(rawToken: string, message: TelegramMessage) {
   });
   await sendMessage(
     String(message.chat.id),
-    `Готово! Вы подписались на обновления <a href="${appUrl()}/t/${result.slug}?utm_source=telegram&utm_medium=bot&utm_campaign=connected"><b>${html(result.name)}</b></a>.\n\nКогда в истории появится новая музыка, Taste пришлёт одну дневную сводку. Новые комментарии автора придут сразу.\n\nОтключить уведомления можно в профиле автора или командой /stop.`,
+    `Готово! Вы подписались на обновления <a href="${appUrl()}/t/${result.slug}?utm_source=telegram&utm_medium=bot&utm_campaign=connected"><b>${html(result.name)}</b></a>.\n\nКогда в истории появится новая музыка, Taste пришлёт одну дневную сводку. Новые комментарии Саундмейкера придут сразу.\n\nОтключить уведомления можно в профиле Саундмейкера или командой /stop.`,
     { label: "Открыть профиль", url: `${appUrl()}/t/${result.slug}?utm_source=telegram&utm_medium=bot&utm_campaign=connected` }
   );
   return result;
@@ -169,10 +192,10 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
       update telegram_subscriptions ts set active = false, unsubscribed_at = now(), updated_at = now()
       from telegram_accounts ta where ta.user_id = ts.user_id and ta.telegram_user_id = ${String(message.from.id)} and ts.active = true
     `;
-    await sendMessage(String(message.chat.id), "Уведомления остановлены. Их можно снова включить в профиле любого автора в Taste.");
+    await sendMessage(String(message.chat.id), "Уведомления остановлены. Их можно снова включить в профиле любого Саундмейкера в Taste.");
     return { handled: true };
   }
-  await sendMessage(String(message.chat.id), "Откройте профиль автора в Taste и нажмите «Уведомлять в Telegram». Команда /stop отключит все уведомления.");
+  await sendMessage(String(message.chat.id), "Откройте профиль Саундмейкера в Taste и нажмите «Уведомлять в Telegram». Команда /stop отключит все уведомления.");
   return { handled: true };
 }
 
@@ -181,15 +204,18 @@ export async function notifyTelegramUpdateError(update: TelegramUpdate, error: u
   if (!chatId) return;
   const code = error instanceof Error ? error.message : "TELEGRAM_LINK_FAILED";
   const text = code === "LINK_EXPIRED" || code === "LINK_INVALID"
-    ? "Ссылка устарела или уже использована. Вернитесь в профиль автора и нажмите «Уведомлять в Telegram» ещё раз."
+    ? "Ссылка устарела или уже использована. Вернитесь в профиль Саундмейкера и нажмите «Уведомлять в Telegram» ещё раз."
     : code === "TELEGRAM_ALREADY_LINKED"
       ? "Этот Telegram уже связан с другим аккаунтом Taste. Отключите уведомления командой /stop и войдите в нужный аккаунт."
-      : "Не удалось включить уведомления. Получите новую ссылку в профиле автора и попробуйте ещё раз.";
+      : "Не удалось включить уведомления. Получите новую ссылку в профиле Саундмейкера и попробуйте ещё раз.";
   await sendMessage(String(chatId), text).catch(() => undefined);
 }
 
 export async function dispatchDailyTelegramNotifications() {
   if (!telegramNotificationsConfigured()) return { enabled: false, attempted: 0, sent: 0, failed: 0 };
+  // History digests are intentionally quiet during the day. The five-minute
+  // automation cycle sends the first eligible digest after 20:00 Moscow time.
+  if (moscowHour() < 20) return { enabled: true, attempted: 0, sent: 0, failed: 0 };
   await ensureSchema();
   const subscriptions = await db()`
     select ts.id, ts.user_id, ts.tastemaker_id, ts.subscribed_at, ts.last_notified_at,
@@ -272,6 +298,13 @@ export async function dispatchDailyTelegramNotifications() {
 export async function dispatchCreatorCommentNotifications(commentId?: string) {
   if (!telegramNotificationsConfigured()) return { enabled: false, attempted: 0, sent: 0, failed: 0 };
   await ensureSchema();
+  // Failed deliveries are safe to retry: the click token is hashed and every
+  // successful delivery remains protected by the unique comment index.
+  await db()`
+    delete from telegram_deliveries
+    where delivery_type = 'creator_comment' and status = 'failed'
+      and (${commentId || null}::text is null or comment_id::text = ${commentId || null})
+  `;
   const subscriptions = await db()`
     select ts.id as subscription_id, ts.user_id, ts.tastemaker_id, ta.chat_id,
       ec.id as comment_id, ec.body, e.id as event_id, e.track_title, e.artist_names,

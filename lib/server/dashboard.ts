@@ -3,12 +3,13 @@ import { db, ensureSchema } from "@/lib/server/db";
 import { getAutomationState } from "@/lib/server/automation";
 import { telegramNotificationsConfigured } from "@/lib/server/config";
 import { connectorHealth } from "@/lib/server/connector";
-import type { AnalyticsSummary, ListeningEvent, Role, TastemakerStatus } from "@/types/domain";
+import type { AnalyticsSummary, ListeningEvent, Role, TastemakerGender, TastemakerStatus } from "@/types/domain";
 
 export type AdminTastemakerRow = {
   id: string;
   slug: string;
   name: string;
+  gender: TastemakerGender;
   avatarUrl: string | null;
   status: TastemakerStatus;
   registered: boolean;
@@ -59,6 +60,7 @@ export type CreatorDashboardData = {
   id: string;
   slug: string;
   name: string;
+  gender: TastemakerGender;
   roleLine: string;
   bio: string;
   avatarUrl: string | null;
@@ -146,7 +148,7 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
   await ensureSchema();
   const [makers, analytics, failures, audits, serviceConnections, telegramRows, retentionRows, globalRetentionRows, followerRetentionRows, automation, connectorOnline] = await Promise.all([
     db()`
-      select t.id, t.slug, t.name, t.avatar_url, t.status, (t.owner_user_id is not null) as registered,
+      select t.id, t.slug, t.name, t.gender, t.avatar_url, t.status, (t.owner_user_id is not null) as registered,
         coalesce(f.follower_count, 0)::int as follower_count,
         coalesce(a.profile_views_7d, 0)::int as profile_views_7d,
         coalesce(a.unique_visitors_7d, 0)::int as unique_visitors_7d,
@@ -332,7 +334,7 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
       const retention = retentionByTastemaker.get(String(row.id));
       const followerRetention = followerRetentionByTastemaker.get(String(row.id));
       return {
-        id: String(row.id), slug: String(row.slug), name: String(row.name), avatarUrl: row.avatar_url ? String(row.avatar_url) : null, status: row.status, registered: Boolean(row.registered),
+        id: String(row.id), slug: String(row.slug), name: String(row.name), gender: row.gender === "male" || row.gender === "female" ? row.gender : "neutral", avatarUrl: row.avatar_url ? String(row.avatar_url) : null, status: row.status, registered: Boolean(row.registered),
         followerCount: Number(row.follower_count || 0), profileViews7d: Number(row.profile_views_7d || 0), uniqueVisitors7d: Number(row.unique_visitors_7d || 0),
         historyUnlocks7d: Number(row.history_unlocks_7d || 0), authCompletions7d: Number(row.auth_completions_7d || 0),
         followClicks7d: Number(row.follow_clicks_7d || 0), follows7d: Number(row.follows_7d || 0), trackOpens7d: Number(row.track_opens_7d || 0),
@@ -373,7 +375,10 @@ export async function getCreatorDashboardData(userId: string, role: Role): Promi
       mc.status as connection_status, mc.provider_account_id, mc.provider_login, mc.last_success_at,
       mc.token_expires_at, mc.last_error_code,
       p.public_url, p.max_tracks, p.revision, p.last_sync_at as playlist_last_sync_at,
-      (select count(distinct e.track_provider_id)::int from listening_events e where e.tastemaker_id = t.id and e.visibility = 'public') as playlist_track_count,
+      least(
+        (select count(distinct e.track_provider_id)::int from listening_events e where e.tastemaker_id = t.id and e.visibility = 'public'),
+        coalesce(p.max_tracks, 50)
+      )::int as playlist_track_count,
       (select count(*)::int from blocked_artists ba where ba.tastemaker_id = t.id) as hidden_artist_count,
       (select count(*)::int from telegram_subscriptions ts where ts.tastemaker_id = t.id and ts.active = true) as telegram_subscriber_count
     from tastemakers t
@@ -410,7 +415,7 @@ export async function getCreatorDashboardData(userId: string, role: Role): Promi
   const accountId = maker.provider_account_id ? String(maker.provider_account_id) : null;
   const eventModels = events.map(eventFromRow);
   return {
-    id: String(maker.id), slug: String(maker.slug), name: String(maker.name), roleLine: String(maker.role_line), bio: String(maker.bio || ""),
+    id: String(maker.id), slug: String(maker.slug), name: String(maker.name), gender: maker.gender === "male" || maker.gender === "female" ? maker.gender : "neutral", roleLine: String(maker.role_line), bio: String(maker.bio || ""),
     avatarUrl: maker.avatar_url ? String(maker.avatar_url) : null,
     status: maker.status, publishEnabled: Boolean(maker.publish_enabled),
     publicationDelaySeconds: Number(maker.publication_delay_seconds || 0), syncIntervalSeconds: Number(maker.sync_interval_seconds || 60), followerCount: Number(maker.follower_count || 0),

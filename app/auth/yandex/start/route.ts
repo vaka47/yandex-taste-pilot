@@ -4,7 +4,7 @@ import { encryptSecret, pkceChallenge, randomToken } from "@/lib/server/crypto";
 import { recordAnalytics } from "@/lib/server/analytics";
 
 function safeReturnTo(value: string | null) {
-  return value && value.startsWith("/") && !value.startsWith("//") ? value : "/following";
+  return value && value.startsWith("/") && !value.startsWith("//") ? value : "/";
 }
 
 export async function GET(request: NextRequest) {
