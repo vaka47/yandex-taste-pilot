@@ -31,6 +31,7 @@ export function ProfileClient({ initialProfile, session }: { initialProfile: Tas
   const [footerVisible, setFooterVisible] = useState(false);
   const [telegramState, setTelegramState] = useState(profile.telegram);
   const [telegramBusy, setTelegramBusy] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
   const primaryFollowRef = useRef<HTMLButtonElement>(null);
   const autoTelegramRef = useRef(false);
 
@@ -55,6 +56,12 @@ export function ProfileClient({ initialProfile, session }: { initialProfile: Tas
     const timer = window.setTimeout(() => setToast(null), 4600);
     return () => window.clearTimeout(timer);
   }, [toast]);
+
+  useEffect(() => {
+    if (!shareCopied) return;
+    const timer = window.setTimeout(() => setShareCopied(false), 2600);
+    return () => window.clearTimeout(timer);
+  }, [shareCopied]);
 
   useEffect(() => {
     const button = primaryFollowRef.current;
@@ -122,13 +129,25 @@ export function ProfileClient({ initialProfile, session }: { initialProfile: Tas
 
   async function share() {
     trackEvent("share_click", { tastemakerId: profile.id });
-    const shareData = { title: `Что слушает ${profile.name}`, text: `Живая история музыкального вкуса ${profile.name} в Taste`, url: window.location.href };
-    if (navigator.share) await navigator.share(shareData).catch(error => {
-      if ((error as DOMException)?.name !== "AbortError") setToast({ tone: "error", text: "Не удалось открыть меню отправки." });
-    });
-    else {
-      try { await navigator.clipboard.writeText(window.location.href); setToast({ tone: "success", text: "Ссылка скопирована." }); }
-      catch { setToast({ tone: "error", text: "Не удалось скопировать ссылку." }); }
+    const profileUrl = `${window.location.origin}/t/${profile.slug}`;
+    try {
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(profileUrl);
+      else {
+        const textarea = document.createElement("textarea");
+        textarea.value = profileUrl;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        const copied = document.execCommand("copy");
+        textarea.remove();
+        if (!copied) throw new Error("COPY_FAILED");
+      }
+      setShareCopied(true);
+      setToast({ tone: "success", text: "Ссылка на страницу скопирована." });
+    } catch {
+      setToast({ tone: "error", text: "Не удалось скопировать ссылку." });
     }
   }
 
@@ -236,12 +255,12 @@ export function ProfileClient({ initialProfile, session }: { initialProfile: Tas
           <div><strong>{compactNumber(profile.followerCount)}</strong><span>подписчиков</span></div>
           <div><strong>{profile.totalEventCount30d}</strong><span>прослушиваний за 30 дней</span></div>
           <div><strong>{profile.playlistTrackCount}</strong><span>треков в плейлисте</span></div>
-          <button type="button" onClick={() => void share()}><Icon name="share" /><span>Поделиться</span></button>
+          <button type="button" onClick={() => void share()}><Icon name={shareCopied ? "check" : "share"} /><span>{shareCopied ? "Ссылка скопирована" : "Поделиться"}</span></button>
         </section>
 
         <section className="listeningSection">
           <header className="sectionHeader"><div><span>последние обновления</span><h2>История прослушиваний</h2></div><p>Нажмите на трек, чтобы открыть его в Яндекс Музыке.</p></header>
-          <div className="eventList">
+          <div className={`eventList ${profile.historyAccess === "full" ? "eventListScrollable" : ""}`} tabIndex={profile.historyAccess === "full" ? 0 : undefined} aria-label={profile.historyAccess === "full" ? "Последние шесть прослушиваний. Список прокручивается." : undefined}>
             {profile.events.slice(0, profile.historyAccess === "teaser" ? 1 : 6).map((event, index) => (
               <a className={`eventRow ${event.track.coverUrl ? "" : "noArtwork"}`} key={event.id} href={`/go/track/${event.id}?source=recent&position=${index + 1}`} target="_blank" rel="noreferrer" aria-label={`Открыть ${event.track.title} в Яндекс Музыке`}>
                 <span className="eventIndex">{String(index + 1).padStart(2, "0")}</span>

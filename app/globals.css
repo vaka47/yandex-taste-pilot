@@ -836,6 +836,15 @@ summary:active {
 .mobileMenuBackdrop, .mobileMenuPanel { display: none; }
 .textPage > .publicHeader { max-width: 1100px; display: grid; grid-template-columns: 1fr auto 1fr; justify-content: initial; }
 .desktopHeadingLine { display: block; white-space: nowrap; }
+.followingEmpty h1 { letter-spacing: .025em; line-height: .98; }
+.landingBottomLine { display: block; white-space: nowrap; }
+.eventListScrollable { max-height: 430px; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-gutter: stable; scrollbar-width: thin; scrollbar-color: var(--signal) var(--paper-2); }
+.eventListScrollable:focus-visible { outline-offset: 5px; }
+
+@media (min-width: 981px) {
+  .firstSeenSection .sectionHeader { grid-template-columns: minmax(0,1fr); }
+  .firstSeenSection .sectionHeader h2 { max-width: none; white-space: nowrap; font-size: clamp(42px,4.4vw,68px); letter-spacing: .015em; }
+}
 
 .landingVisual { background: var(--signal); }
 .landingVisual::before { background: repeating-radial-gradient(circle at 50% 43%, transparent 0 60px, rgba(255,255,255,.34) 61px 62px); }
@@ -885,6 +894,9 @@ summary:active {
   .heroActions.anonymousActions > * { grid-column: auto; min-width: 0; }
   .heroActions.anonymousActions .heroTelegramAction { grid-column: 2; padding: 0 11px; font-size: 10px; }
   .repeatGrid { grid-auto-columns: minmax(178px,64vw); }
+  .followingEmpty h1 { letter-spacing: .03em; line-height: 1.02; }
+  .landingBottomLine { display: inline; white-space: normal; }
+  .eventListScrollable { max-height: 360px; }
   .creatorEntryPage .creatorGate { min-width: 0; width: 100%; padding-left: 20px; padding-right: 20px; overflow: hidden; }
   .creatorEntryPage .creatorGate h1 { max-width: 100%; font-size: clamp(34px,10.5vw,44px); line-height: 1.02; letter-spacing: .015em; overflow-wrap: normal; word-break: normal; text-wrap: balance; }
   .creatorEntryPage .creatorGate p, .creatorEntryPage .creatorGate a, .creatorEntryPage .creatorGate form { max-width: 100%; }

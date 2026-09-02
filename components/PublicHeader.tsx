@@ -8,6 +8,7 @@ import type { SessionUser } from "@/types/domain";
 
 export function PublicHeader({ session, landing = false }: { session: SessionUser | null; landing?: boolean }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const canOpenCreatorCabinet = session?.role === "creator" || session?.role === "admin";
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -29,7 +30,8 @@ export function PublicHeader({ session, landing = false }: { session: SessionUse
     <header className={landing ? "landingHeader" : "publicHeader"}>
       <Brand />
       <nav className="desktopHeaderNav" aria-label="Основная навигация">
-        {landing ? <a href="#discover">Саундмейкеры</a> : <Link href="/following">Мои подписки</Link>}
+        {landing ? <a href="#discover">Саундмейкеры</a> : session ? <Link href="/following">Мои подписки</Link> : <Link href="/#discover">Саундмейкеры</Link>}
+        {canOpenCreatorCabinet ? <Link href="/creator">Кабинет</Link> : null}
         <Link href="/about">Как это работает</Link>
         <Link href="/privacy">Приватность</Link>
       </nav>
@@ -38,7 +40,7 @@ export function PublicHeader({ session, landing = false }: { session: SessionUse
         {landing ? <a className="landingHeaderCta" href="#discover">Найти Саундмейкера <Icon name="arrow" /></a> : null}
       </div>
       <button className="mobileMenuButton" type="button" aria-label={menuOpen ? "Закрыть меню" : "Открыть меню"} aria-expanded={menuOpen} onClick={() => setMenuOpen(value => !value)}><span /><span /><span /></button>
-      {menuOpen ? <><button className="mobileMenuBackdrop" type="button" aria-label="Закрыть меню" onClick={closeMenu} /><aside className="mobileMenuPanel" role="dialog" aria-modal="true" aria-label="Навигация"><div><span>Навигация</span><button type="button" onClick={closeMenu} aria-label="Закрыть"><Icon name="x" /></button></div><nav>{landing ? <a href="#discover" onClick={closeMenu}>Саундмейкеры</a> : <Link href="/" onClick={closeMenu}>Главная</Link>}<Link href="/following" onClick={closeMenu}>Мои подписки</Link><Link href="/about" onClick={closeMenu}>Как это работает</Link><Link href="/privacy" onClick={closeMenu}>Приватность</Link><Link href="/creator" onClick={closeMenu}>Кабинет Саундмейкера</Link></nav><div className="mobileMenuAccount">{session ? <form action="/auth/logout" method="post"><button type="submit"><Icon name="user" />Выйти</button></form> : <Link href="/auth/yandex/start?returnTo=/" onClick={closeMenu}><Icon name="user" />Войти через Яндекс ID</Link>}</div></aside></> : null}
+      {menuOpen ? <><button className="mobileMenuBackdrop" type="button" aria-label="Закрыть меню" onClick={closeMenu} /><aside className="mobileMenuPanel" role="dialog" aria-modal="true" aria-label="Навигация"><div><span>Навигация</span><button type="button" onClick={closeMenu} aria-label="Закрыть"><Icon name="x" /></button></div><nav>{landing ? <a href="#discover" onClick={closeMenu}>Саундмейкеры</a> : <Link href="/" onClick={closeMenu}>Главная</Link>}{session ? <Link href="/following" onClick={closeMenu}>Мои подписки</Link> : null}{canOpenCreatorCabinet ? <Link href="/creator" onClick={closeMenu}>Кабинет Саундмейкера</Link> : null}<Link href="/about" onClick={closeMenu}>Как это работает</Link><Link href="/privacy" onClick={closeMenu}>Приватность</Link></nav><div className="mobileMenuAccount">{session ? <form action="/auth/logout" method="post"><button type="submit"><Icon name="user" />Выйти</button></form> : <Link href="/auth/yandex/start?returnTo=/" onClick={closeMenu}><Icon name="user" />Войти через Яндекс ID</Link>}</div></aside></> : null}
     </header>
   );
 }
