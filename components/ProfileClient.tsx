@@ -261,7 +261,7 @@ export function ProfileClient({ initialProfile, session }: { initialProfile: Tas
         <section className="listeningSection">
           <header className="sectionHeader"><div><span>последние обновления</span><h2>История прослушиваний</h2></div><p>Нажмите на трек, чтобы открыть его в Яндекс Музыке.</p></header>
           <div className={`eventList ${profile.historyAccess === "full" ? "eventListScrollable" : ""}`} tabIndex={profile.historyAccess === "full" ? 0 : undefined} aria-label={profile.historyAccess === "full" ? "Последние шесть прослушиваний. Список прокручивается." : undefined}>
-            {profile.events.slice(0, profile.historyAccess === "teaser" ? 1 : 6).map((event, index) => (
+            {(profile.historyAccess === "teaser" ? profile.events.slice(0, 1) : profile.events).map((event, index) => (
               <a className={`eventRow ${event.track.coverUrl ? "" : "noArtwork"}`} key={event.id} href={`/go/track/${event.id}?source=recent&position=${index + 1}`} target="_blank" rel="noreferrer" aria-label={`Открыть ${event.track.title} в Яндекс Музыке`}>
                 <span className="eventIndex">{String(index + 1).padStart(2, "0")}</span>
                 <span className="eventArtwork"><CoverArt url={event.track.coverUrl} title={event.track.title} /></span>
