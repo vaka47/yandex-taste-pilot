@@ -38,7 +38,7 @@ export function HomeDiscoveryClient({ profiles, activity }: { profiles: HomeTast
       <section className="landingHero">
         <div className="landingCopy">
           <span className="landingKicker"><i /> музыка людей, которым вы верите</span>
-          <h1>Слышать мир<br /><em>чужими ушами.</em></h1>
+          <h1><span className="landingTitleLead">Слышать мир</span><em>чужими ушами</em></h1>
           <p>Живая музыкальная история людей, чьему вкусу вы доверяете</p>
           <div className="landingHeroActions"><a className="landingPrimary" href="#discover"><Icon name="search" />Найти Саундмейкера</a><Link className="landingSecondary" href="/about">Как это устроено <Icon name="arrow" /></Link></div>
         </div>

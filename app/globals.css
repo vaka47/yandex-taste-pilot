@@ -610,6 +610,7 @@ summary:active {
 .pencilUnderline::after { left: 3%; bottom: -12px; height: 1px; transform: rotate(.8deg); opacity: .62; }
 
 .landingCopy h1, .landingCopy h1 em { letter-spacing: .035em; }
+.landingTitleLead { display: block; }
 .landingCopy > p { max-width: 540px; }
 .landingVisual { container-type: size; --portrait-size: min(calc(100cqw - 64px), calc(100cqh - 64px)); }
 .landingSlide:active { transform: none !important; filter: none !important; box-shadow: none !important; opacity: 1 !important; }
@@ -727,9 +728,10 @@ summary:active {
 .workspaceModal select { width: 100%; height: 44px; border: 1px solid var(--line); background: var(--white); padding: 0 12px; color: var(--ink); }
 
 @media (min-width: 981px) {
-  .landingHero { height: calc(100svh - 82px); min-height: 640px; max-height: 760px; }
-  .landingCopy { padding-top: 54px; padding-bottom: 48px; }
+  .landingHero { height: calc(100svh - 82px); min-height: 640px; max-height: 760px; grid-template-columns: 1.15fr .85fr; }
+  .landingCopy { padding: 54px clamp(46px,5vw,74px) 48px clamp(26px,2vw,38px); }
   .landingCopy h1 { margin: 22px 0 18px; font-size: clamp(70px,7.2vw,112px); line-height: .88; }
+  .landingTitleLead { display: block; width: max-content; max-width: 100%; white-space: nowrap; font-size: clamp(52px,4.4vw,82px); line-height: .96; }
   .landingCopy > p { margin: 12px 0; }
 }
 
