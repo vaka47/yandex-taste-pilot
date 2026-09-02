@@ -19,7 +19,7 @@ function trackEvent(eventName: string, data: Record<string, unknown> = {}) {
   }).catch(() => undefined);
 }
 
-export function ProfileClient({ initialProfile, session, ownerView = false }: { initialProfile: TastemakerProfile; session: SessionUser | null; ownerView?: boolean }) {
+export function ProfileClient({ initialProfile, session }: { initialProfile: TastemakerProfile; session: SessionUser | null }) {
   const searchParams = useSearchParams();
   const [profile, setProfile] = useState(initialProfile);
   const [authOpen, setAuthOpen] = useState(false);
@@ -211,7 +211,6 @@ export function ProfileClient({ initialProfile, session, ownerView = false }: { 
         <section className="profileHero">
           <div className="portraitStage">
             <ProfilePortrait name={profile.name} avatarUrl={profile.avatarUrl} />
-            {ownerView && profile.avatarUrl ? <aside className="ownerPhotoTools"><span><Icon name="shield" />Только для владельца</span><a href={`${profile.avatarUrl}${profile.avatarUrl.includes("?") ? "&" : "?"}download=1`}><Icon name="arrow" />Скачать фото</a></aside> : null}
             {profile.events[0] ? <a className="nowTape" href={`/go/track/${profile.events[0].id}?source=hero_tape&position=1`} target="_blank" rel="noreferrer" aria-label={`Открыть ${profile.events[0].track.title} в Яндекс Музыке`}>
               <span className="liveDot" />
               <div><small>{profile.events[0] ? `последняя запись · ${listeningTime(profile.events[0])}` : "ждём первую запись"}</small><strong>{profile.events[0]?.track.title || "История скоро появится"}</strong><em>{profile.events[0]?.track.artists.join(", ") || "Taste обновит страницу автоматически"}</em></div>
@@ -224,10 +223,10 @@ export function ProfileClient({ initialProfile, session, ownerView = false }: { 
             <h1>Что слушает<br /><span>{profile.name}</span></h1>
             {profile.roleLine || profile.verified ? <div className="identityLine">{profile.roleLine ? <strong>{profile.roleLine}</strong> : null}{profile.verified ? <i className="verified"><Icon name="check" size={12} /></i> : null}</div> : null}
             {profile.bio ? <p>{profile.bio}</p> : null}
-            <div className="heroActions">
+            <div className={`heroActions ${!session ? "anonymousActions" : ""}`}>
               <button ref={primaryFollowRef} className={`primaryAction ${profile.viewerFollows ? "isFollowing" : ""}`} type="button" onClick={() => void follow()}><Icon name={profile.viewerFollows ? "check" : "pulse"} />{profile.viewerFollows ? "Вы подписаны" : "Подписаться"}</button>
               {profile.viewerFollows && profile.playlistUrl ? <a className="playlistAction" href={`/go/playlist/${profile.id}`} target="_blank" rel="noreferrer"><Icon name="playlist" /> Плейлист в Яндекс Музыке <Icon name="arrow" size={17} /></a> : null}
-              {!telegramState.subscribed ? <button className="heroTelegramAction" type="button" disabled={telegramBusy || !telegramState.available} onClick={() => void connectTelegram()}><Icon name="send" />{telegramBusy ? "Подключаем Telegram…" : "Получать обновления в Telegram"}<Icon name="arrow" size={17} /></button> : null}
+              {!telegramState.subscribed ? <button className="heroTelegramAction" type="button" disabled={telegramBusy || !telegramState.available} onClick={() => void connectTelegram()}><Icon name="send" /><span>{telegramBusy ? "Подключаем Telegram…" : "Получать обновления в Telegram"}</span><Icon name="arrow" size={17} /></button> : null}
             </div>
             <div className="heroTrust"><Icon name="shield" size={18} /><span>История публикуется с разрешения Саундмейкера.</span></div>
           </div>
@@ -243,7 +242,7 @@ export function ProfileClient({ initialProfile, session, ownerView = false }: { 
         <section className="listeningSection">
           <header className="sectionHeader"><div><span>последние обновления</span><h2>История прослушиваний</h2></div><p>Нажмите на трек, чтобы открыть его в Яндекс Музыке.</p></header>
           <div className="eventList">
-            {profile.events.slice(0, profile.historyAccess === "teaser" ? 3 : 6).map((event, index) => (
+            {profile.events.slice(0, profile.historyAccess === "teaser" ? 1 : 6).map((event, index) => (
               <a className={`eventRow ${event.track.coverUrl ? "" : "noArtwork"}`} key={event.id} href={`/go/track/${event.id}?source=recent&position=${index + 1}`} target="_blank" rel="noreferrer" aria-label={`Открыть ${event.track.title} в Яндекс Музыке`}>
                 <span className="eventIndex">{String(index + 1).padStart(2, "0")}</span>
                 <span className="eventArtwork"><CoverArt url={event.track.coverUrl} title={event.track.title} /></span>
@@ -253,12 +252,12 @@ export function ProfileClient({ initialProfile, session, ownerView = false }: { 
                 <span className="trackOpen"><span>Открыть</span><Icon name="arrow" /></span>
               </a>
             ))}
-            {profile.historyAccess === "teaser" && profile.events.length ? [4, 5].map(index => <div className="eventRow lockedEventRow" key={`locked-${index}`} aria-hidden="true"><span className="eventIndex">{String(index).padStart(2, "0")}</span><span className="lockedCover"><Icon name="lock" /></span><div className="eventTrack"><strong>Скрытый трек</strong><span>Имя исполнителя</span></div><div className="eventSignal"><i /><span>после входа</span></div><time>—</time><span className="lockedOpen"><Icon name="lock" size={13} />Закрыто</span></div>) : null}
+            {profile.historyAccess === "teaser" && profile.events.length ? [2, 3].map(index => <div className="eventRow lockedEventRow" key={`locked-${index}`} aria-hidden="true"><span className="eventIndex">{String(index).padStart(2, "0")}</span><span className="lockedCover"><Icon name="lock" /></span><div className="eventTrack"><strong>Скрытый трек</strong><span>Имя исполнителя</span></div><div className="eventSignal"><i /><span>после входа</span></div><time>—</time><span className="lockedOpen"><Icon name="lock" size={13} />Закрыто</span></div>) : null}
             {!profile.events.length ? <div className="sectionEmpty"><Icon name="music" /><strong>История пока пуста</strong><span>Первая запись появится после следующего прослушивания и синхронизации.</span></div> : null}
           </div>
         </section>
 
-        {profile.historyAccess === "teaser" ? <section className="historyUnlockSection"><div className="unlockIntro"><div className="unlockSignal" aria-hidden="true"><i /><i /><i /><i /></div><span>продолжение после входа</span></div><h2>Три последних трека — уже здесь. Остальное откроется вам после входа</h2><p>Войдите через Яндекс ID, чтобы увидеть всю историю, повторы и комментарии Саундмейкера. Taste не получает доступ к вашей музыке.</p><div className="unlockBenefits"><span><Icon name="music" />Полная история</span><span><Icon name="pulse" />Повторы за 7 дней</span><span><Icon name="spark" />Комментарии Саундмейкера</span></div><Link className="historyUnlockAction" href={unlockHref} onClick={() => trackEvent("history_unlock_click", { tastemakerId: profile.id })}><span>Я</span>Войти и продолжить <Icon name="arrow" /></Link></section> : <>
+        {profile.historyAccess === "teaser" ? <section className="historyUnlockSection"><div className="unlockIntro"><div className="unlockSignal" aria-hidden="true"><i /><i /><i /><i /></div><span>продолжение после входа</span></div><h2>Последний трек уже здесь. Остальное откроется вам после входа</h2><p>Войдите через Яндекс ID, чтобы увидеть всю историю, повторы и комментарии Саундмейкера. Taste не получает доступ к вашей музыке.</p><div className="unlockBenefits"><span><Icon name="music" />Полная история</span><span><Icon name="pulse" />Повторы за 7 дней</span><span><Icon name="spark" />Комментарии Саундмейкера</span></div><Link className="historyUnlockAction" href={unlockHref} onClick={() => trackEvent("history_unlock_click", { tastemakerId: profile.id })}><span>Я</span>Войти и продолжить <Icon name="arrow" /></Link></section> : <>
           <section className="repeatSection">
             <header className="sectionHeader sectionHeaderLight"><div><span>возвращается снова</span><h2>На повторе</h2></div><p>Треки, которые встречались в истории несколько раз за 7 дней.</p></header>
           <div className="repeatGrid" aria-label="Треки на повторе">{onRepeat.length ? onRepeat.map((event, index) => <a href={`/go/track/${event.id}?source=on_repeat&position=${index + 1}`} target="_blank" rel="noreferrer" className={`repeatItem ${event.track.coverUrl ? "" : "noArtwork"}`} key={event.id}><CoverArt url={event.track.coverUrl} title={event.track.title} size="large" /><span className="repeatRank">{String(index + 1).padStart(2, "0")}</span><strong>{event.track.title}</strong><span>{event.track.artists.join(", ")}</span><em>{event.consecutiveCount >= 2 ? `${event.consecutiveCount} подряд · ${event.playCount7d} за 7 дней` : `${event.playCount7d} раза за 7 дней`}</em></a>) : <div className="sectionEmpty"><Icon name="pulse" /><strong>Повторы ещё не накопились</strong><span>Они появятся, когда Саундмейкер вернётся к одному треку несколько раз.</span></div>}</div>
@@ -271,7 +270,7 @@ export function ProfileClient({ initialProfile, session, ownerView = false }: { 
 
         <section className={`telegramInvite ${telegramState.subscribed ? "isActive" : ""}`}>
           <span className="telegramInviteIcon"><Icon name="send" /></span>
-          <div><small>обновления без лишнего шума</small><h2>{telegramState.subscribed ? `Вы получаете новости о ${profile.name}` : "Узнавайте о новой музыке в Telegram"}</h2><p>{telegramState.subscribed ? "Новая музыка придёт одной дневной сводкой после 20:00 по Москве, а комментарии Саундмейкера — сразу." : `После 20:00 по Москве Taste пришлёт одну сводку, если ${profile.name} слушал новую музыку. Комментарии к трекам приходят сразу.`}</p></div>
+          <div><small>обновления без лишнего шума</small><h2>{telegramState.subscribed ? `Вы получаете новости о ${profile.name}` : "Узнавайте о новой музыке в Telegram"}</h2><p>{telegramState.subscribed ? "Дневная сводка придёт в вашем персональном слоте с 12:00 до 21:00 по Москве, а комментарии Саундмейкера — сразу." : `Taste назначит отдельный дневной слот с 12:00 до 21:00 по Москве и пришлёт одну сводку, если ${profile.name} слушал новую музыку. Комментарии приходят сразу.`}</p></div>
           <button type="button" disabled={telegramBusy || (!telegramState.available && !telegramState.subscribed)} onClick={() => void (telegramState.subscribed ? disconnectTelegram() : connectTelegram())}>{telegramBusy ? "Подключаем…" : telegramState.subscribed ? "Отключить" : telegramState.available ? "Получать уведомления" : "Скоро"}<Icon name="arrow" /></button>
         </section>
       </main>

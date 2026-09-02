@@ -3,7 +3,6 @@ import { ProfileClient } from "@/components/ProfileClient";
 import { PublicHeader } from "@/components/PublicHeader";
 import { getPublicProfile } from "@/lib/server/repository";
 import { getSessionUser } from "@/lib/server/session";
-import { isAdminYandexId } from "@/lib/server/config";
 import { syncTastemakerFully } from "@/lib/server/sync";
 import { after } from "next/server";
 
@@ -25,7 +24,7 @@ export default async function TastemakerPage({ params }: { params: Promise<{ slu
   return (
     <div className="publicShell">
       <PublicHeader session={session} />
-      <ProfileClient initialProfile={profile} session={session} ownerView={Boolean(session?.role === "admin" && session.authContext === "owner_password" && isAdminYandexId(session.yandexId))} />
+      <ProfileClient initialProfile={profile} session={session} />
       <footer className="publicFooter">
         <div><strong>Taste</strong><span>Музыкальный вкус — это сигнал, а не алгоритм.</span></div>
         <nav><a href="/about">О продукте</a><a href="/privacy">Приватность</a><a href="mailto:camp@navumi.com">camp@navumi.com</a></nav>

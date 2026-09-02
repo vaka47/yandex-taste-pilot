@@ -56,7 +56,7 @@ export async function getPublicProfile(slug: string, viewerId: string | null): P
     if (!fixturesEnabled() || slug !== fixtureProfile.slug) return null;
     return viewerId
       ? { ...fixtureProfile, historyAccess: "full" }
-      : { ...fixtureProfile, historyAccess: "teaser", events: fixtureProfile.events.slice(0, 3), viewerFollows: false };
+      : { ...fixtureProfile, historyAccess: "teaser", events: fixtureProfile.events.slice(0, 1), viewerFollows: false };
   }
   await ensureSchema();
   const profileRows = await db()`
@@ -122,7 +122,7 @@ export async function getPublicProfile(slug: string, viewerId: string | null): P
         e.fetched_at
       ) desc,
       case when coalesce(e.raw_metadata->>'providerPosition', '') ~ '^[0-9]+$' then (e.raw_metadata->>'providerPosition')::int end asc nulls last
-    limit ${viewerId ? 80 : 3}
+    limit ${viewerId ? 80 : 1}
   `;
   return {
     id: row.id, slug: row.slug, name: row.name, gender: gender(row.gender), bio: row.bio, roleLine: row.role_line,

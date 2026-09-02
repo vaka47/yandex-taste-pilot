@@ -46,13 +46,23 @@ async function sendMessage(chatId: string, text: string, button?: { label: strin
   });
 }
 
-function moscowHour(now = new Date()) {
-  const hour = new Intl.DateTimeFormat("en-GB", {
+function moscowMinuteOfDay(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone: "Europe/Moscow",
     hour: "2-digit",
+    minute: "2-digit",
     hourCycle: "h23"
-  }).formatToParts(now).find(part => part.type === "hour")?.value;
-  return Number(hour ?? -1);
+  }).formatToParts(now);
+  const hour = Number(parts.find(part => part.type === "hour")?.value ?? -1);
+  const minute = Number(parts.find(part => part.type === "minute")?.value ?? -1);
+  return hour < 0 || minute < 0 ? -1 : hour * 60 + minute;
+}
+
+function digestSlotMinute(slotIndex: number, slotCount: number) {
+  if (slotCount <= 1) return 20 * 60;
+  const firstSlot = 12 * 60;
+  const lastSlot = 21 * 60;
+  return firstSlot + Math.round((lastSlot - firstSlot) * slotIndex / Math.max(1, slotCount - 1));
 }
 
 export async function setupTelegramWebhook() {
@@ -213,14 +223,23 @@ export async function notifyTelegramUpdateError(update: TelegramUpdate, error: u
 
 export async function dispatchDailyTelegramNotifications() {
   if (!telegramNotificationsConfigured()) return { enabled: false, attempted: 0, sent: 0, failed: 0 };
-  // History digests are intentionally quiet during the day. The five-minute
-  // automation cycle sends the first eligible digest after 20:00 Moscow time.
-  if (moscowHour() < 20) return { enabled: true, attempted: 0, sent: 0, failed: 0 };
+  // Each listener gets stable daytime slots spread across all active
+  // subscriptions. A narrow window avoids a burst when many makers update.
+  const currentMinute = moscowMinuteOfDay();
+  if (currentMinute < 12 * 60 || currentMinute >= 21 * 60 + 15) return { enabled: true, attempted: 0, sent: 0, failed: 0 };
   await ensureSchema();
   const subscriptions = await db()`
+    with active_subscriptions as (
+      select ts.*,
+        (row_number() over (partition by ts.user_id order by ts.tastemaker_id) - 1)::int as slot_index,
+        count(*) over (partition by ts.user_id)::int as slot_count
+      from telegram_subscriptions ts
+      where ts.active = true
+    )
     select ts.id, ts.user_id, ts.tastemaker_id, ts.subscribed_at, ts.last_notified_at,
+      ts.slot_index, ts.slot_count,
       ta.chat_id, t.name, t.slug, p.public_url, p.last_sync_at
-    from telegram_subscriptions ts
+    from active_subscriptions ts
     join telegram_accounts ta on ta.user_id = ts.user_id and ta.status = 'active'
     join tastemakers t on t.id = ts.tastemaker_id and t.is_public = true and t.status = 'active' and t.publish_enabled = true
     join playlists p on p.tastemaker_id = t.id and p.public_url is not null
@@ -228,11 +247,15 @@ export async function dispatchDailyTelegramNotifications() {
       and (ts.last_notified_at is null or (ts.last_notified_at at time zone 'Europe/Moscow')::date < (now() at time zone 'Europe/Moscow')::date)
       and (ts.notification_locked_until is null or ts.notification_locked_until < now())
     order by ts.last_notified_at asc nulls first
-    limit 500
+    limit 5000
   `;
+  let attempted = 0;
   let sent = 0;
   let failed = 0;
   for (const subscription of subscriptions) {
+    const slotMinute = digestSlotMinute(Number(subscription.slot_index || 0), Number(subscription.slot_count || 1));
+    if (currentMinute < slotMinute || currentMinute >= slotMinute + 15) continue;
+    attempted += 1;
     const claim = await db()`
       update telegram_subscriptions
       set notification_locked_until = now() + interval '5 minutes', updated_at = now()
@@ -292,7 +315,7 @@ export async function dispatchDailyTelegramNotifications() {
       failed += 1;
     }
   }
-  return { enabled: true, attempted: subscriptions.length, sent, failed };
+  return { enabled: true, attempted, sent, failed };
 }
 
 export async function dispatchCreatorCommentNotifications(commentId?: string) {
