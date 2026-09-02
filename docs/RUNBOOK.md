@@ -18,10 +18,11 @@ Rebuild only the existing playlist object. Desired state is the latest 50 unique
 ## Automation recovery
 
 1. Check **Админка → Автоматическая публикация** for the last source, status and age.
-2. Run the protected cron route manually or dispatch `sync-watchdog.yml`; every run is persisted in `automation_runs`.
-3. A `partial` run means at least one creator sync or Telegram send failed. Successful creators are not rolled back and failed work is retryable.
-4. A public or creator page never waits for Yandex: it serves stored data first, then schedules a best-effort sync after the response.
-5. Do not promise one-minute unattended publication while using only Vercel Hobby and GitHub Actions. Move the protected route to a one-minute production scheduler before a large test.
+2. Confirm that Google Cloud Scheduler job `taste-yandex-history-sync` is enabled and its latest HTTP result is 200. It is the primary one-minute trigger.
+3. Run the protected cron route manually or dispatch `sync-watchdog.yml`; every run is persisted in `automation_runs`.
+4. A `partial` run means at least one creator sync or Telegram send failed. Successful creators are not rolled back and failed work is retryable.
+5. A public or creator page never waits for Yandex: it serves stored data first, then schedules a best-effort sync after the response.
+6. Rotate `CRON_SECRET` atomically in Vercel, GitHub Actions and Cloud Scheduler. A mismatched scheduler header returns 401 by design.
 
 ## Telegram notifications
 

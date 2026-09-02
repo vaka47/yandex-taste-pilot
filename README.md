@@ -71,9 +71,9 @@ Set `ADMIN_YANDEX_IDS` to exactly one Yandex profile ID, plus `ADMIN_LOGIN_USERN
 
 The service-account Yandex Music token must belong to a dedicated pilot account—not a founder's personal account and not a creator's account. Connect it in **Admin → Система → Подключить сервис**. The token is encrypted before it reaches PostgreSQL and is never stored in browser state. The encrypted/plain environment variables remain a break-glass fallback for existing installations.
 
-Create each celebrity from **Админка → Пригласить тейстмейкера**. This generates the only creator-registration path: a one-use invite URL that expires after seven days. After the creator uploads a profile photo, the owner can open that public profile from the admin dashboard, download the prepared square image, and upload it once as the corresponding playlist cover while signed in to the service account. Track updates remain automatic; cover upload is manual because the supported community connector does not expose a reliable playlist-cover mutation.
+Create each celebrity from **Админка → Пригласить Саундмейкера**. This generates the only creator-registration path: a one-use invite URL that expires after seven days. After the creator uploads a profile photo, the owner can open that public profile from the admin dashboard, download the prepared square image, and upload it once as the corresponding playlist cover while signed in to the service account. Track updates remain automatic; cover upload is manual because the supported community connector does not expose a reliable playlist-cover mutation.
 
-On Vercel Hobby, the automation has three layers: an offset protected GitHub Actions cycle every five minutes, an independent hourly watchdog, and one daily Vercel Cron recovery cycle. Active public profiles and the creator cabinet also request a safe post-response sync, while the default tastemaker preference is 60 seconds. This is still not a real-time Yandex webhook: GitHub explicitly does not guarantee exact scheduled start time, and Hobby cannot run Vercel Cron every minute. For a large celebrity test, use Vercel Pro Cron or another production scheduler with one-minute execution, while keeping the watchdog. Configure identical `CRON_SECRET` values in GitHub Actions and the web project, and set the GitHub `APP_URL` secret to the production origin.
+Production automation has four layers: Google Cloud Scheduler calls the protected route every minute, GitHub Actions provides a five-minute recovery cycle and independent hourly watchdog, and Vercel Cron provides one daily recovery call. Active public profiles and the creator cabinet can also request a safe post-response sync. Every scheduler uses the same rotated `CRON_SECRET`; the primary job is `taste-yandex-history-sync` and calls `/api/cron/sync?source=gcp_scheduler`. This is polling rather than a real-time Yandex webhook, so publication follows the first successful poll after Yandex exposes the history event.
 
 For Telegram digests, create a bot in BotFather and set `TELEGRAM_NOTIFICATIONS_ENABLED=true`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME` and a random `TELEGRAM_WEBHOOK_SECRET`. Then open **Админка → Система** and run **Обновить Telegram-вебхук**. A fan must first sign in with Yandex ID and follow the tastemaker; Telegram linking is voluntary and per tastemaker. `/stop` disables all bot notifications. The system never sends more than one digest per tastemaker per Moscow calendar day, and only after that tastemaker's public playlist has caught up with the new stored history.
 
@@ -85,7 +85,7 @@ For Telegram digests, create a bot in BotFather and set `TELEGRAM_NOTIFICATIONS_
 - deployed connector + shared internal secret;
 - dedicated Yandex Music service account authorized in the protected admin UI;
 - a disposable/test tastemaker Yandex Music account;
-- production privacy/deletion email and approved creator consent copy.
+- the working owner contact `camp@navumi.com` and approved creator consent copy;
 - Telegram bot credentials and webhook setup if the notification experiment is enabled.
 
 ## Verification
