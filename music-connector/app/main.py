@@ -67,6 +67,11 @@ class PlaylistRequest(TokenRequest):
     tracks: list[dict[str, Any]] = Field(default_factory=list, max_length=50)
 
 
+class PlaylistDeleteRequest(TokenRequest):
+    uid: str = Field(min_length=1, max_length=80)
+    kind: str = Field(min_length=1, max_length=80)
+
+
 @app.get("/health")
 def health() -> dict[str, Any]:
     return {"ok": True, "provider": "yandex_music_unofficial", "library": "yandex-music==3.0.0"}
@@ -114,3 +119,13 @@ def sync_playlist(body: PlaylistRequest) -> dict[str, Any]:
     except Exception as error:
         raise provider_error(error) from None
 
+
+@app.post("/internal/yandex-music/playlist/delete", dependencies=[Depends(require_internal_secret)])
+def delete_playlist(body: PlaylistDeleteRequest) -> dict[str, Any]:
+    try:
+        deleted = provider.delete_playlist(body.token, body.uid, body.kind)
+        if not deleted:
+            raise RuntimeError("PLAYLIST_DELETE_FAILED")
+        return {"deleted": True}
+    except Exception as error:
+        raise provider_error(error) from None

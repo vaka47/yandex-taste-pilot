@@ -44,3 +44,6 @@ class MusicHistoryProvider(ABC):
     def sync_playlist(self, token: str, payload: dict[str, Any]) -> dict[str, Any]:
         raise NotImplementedError
 
+    @abstractmethod
+    def delete_playlist(self, token: str, uid: str, kind: str) -> bool:
+        raise NotImplementedError

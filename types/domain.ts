@@ -24,6 +24,33 @@ export type ListeningEvent = {
   playCount7d: number;
   consecutiveCount: number;
   firstSeenAt: string;
+  comment: {
+    id: string;
+    body: string;
+    updatedAt: string;
+  } | null;
+};
+
+export type HomeTastemaker = {
+  id: string;
+  slug: string;
+  name: string;
+  roleLine: string;
+  avatarUrl: string | null;
+  latestTrack: { title: string; artists: string[] } | null;
+  updatedAt: string | null;
+};
+
+export type PublicActivity = {
+  id: string;
+  kind: "listen" | "comment";
+  tastemakerName: string;
+  tastemakerSlug: string;
+  trackTitle: string;
+  artists: string[];
+  comment: string | null;
+  eventId: string;
+  occurredAt: string;
 };
 
 export type TastemakerProfile = {

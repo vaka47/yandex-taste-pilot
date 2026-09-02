@@ -7,6 +7,7 @@ export const isYandexIdConfigured = () => Boolean(process.env.YANDEX_ID_CLIENT_I
 export const isConnectorConfigured = () => process.env.MUSIC_CONNECTOR_ENABLED === "true" && Boolean(process.env.MUSIC_CONNECTOR_INTERNAL_URL && process.env.MUSIC_CONNECTOR_INTERNAL_SECRET);
 export const isOwnerLoginConfigured = () => Boolean(process.env.ADMIN_LOGIN_USERNAME && process.env.ADMIN_LOGIN_PASSWORD_HASH);
 export const telegramNotificationsConfigured = () => process.env.TELEGRAM_NOTIFICATIONS_ENABLED === "true" && Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_BOT_USERNAME && process.env.TELEGRAM_WEBHOOK_SECRET);
+export const fixturesEnabled = () => process.env.NODE_ENV !== "production" && process.env.ENABLE_FIXTURES === "true";
 
 export function featureFlag(name: string, defaultValue = false) {
   const value = process.env[name];

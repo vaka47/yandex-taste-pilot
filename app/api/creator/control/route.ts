@@ -1,11 +1,12 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { db, ensureSchema } from "@/lib/server/db";
 import { requireRole } from "@/lib/server/session";
 import { sameOrigin } from "@/lib/server/security";
 import { audit } from "@/lib/server/audit";
 import { syncTastemakerFully, syncTastemakerPlaylist } from "@/lib/server/sync";
+import { dispatchCreatorCommentNotifications } from "@/lib/server/telegram";
 
-const allowed = new Set(["pause", "resume", "publish_enabled", "delay", "sync_interval", "hide_event", "restore_event", "hide_artist", "restore_artist", "sync_now", "playlist_sync", "disconnect", "delete_request"]);
+const allowed = new Set(["pause", "resume", "publish_enabled", "delay", "sync_interval", "hide_event", "restore_event", "hide_artist", "restore_artist", "comment_event", "delete_comment", "sync_now", "playlist_sync", "disconnect"]);
 
 export async function POST(request: NextRequest) {
   if (!sameOrigin(request)) return NextResponse.json({ error: "INVALID_ORIGIN" }, { status: 403 });
@@ -84,6 +85,29 @@ export async function POST(request: NextRequest) {
             )
         `;
       });
+    } else if (body.type === "comment_event" && body.value && typeof body.value === "object") {
+      const value = body.value as { eventId?: unknown; body?: unknown };
+      const eventId = typeof value.eventId === "string" ? value.eventId : "";
+      const commentBody = typeof value.body === "string" ? value.body.trim() : "";
+      if (!eventId || !commentBody || commentBody.length > 600) return NextResponse.json({ error: "INVALID_COMMENT" }, { status: 400 });
+      const comments = await db()`
+        insert into event_comments (listening_event_id, tastemaker_id, author_user_id, body, is_public)
+        select e.id, e.tastemaker_id, ${creator.id}, ${commentBody}, true
+        from listening_events e where e.id::text = ${eventId} and e.tastemaker_id = ${tastemakerId}
+        on conflict (listening_event_id) do update set body = excluded.body, is_public = true, author_user_id = excluded.author_user_id, updated_at = now()
+        returning id, body, updated_at
+      `;
+      if (!comments[0]) return NextResponse.json({ error: "EVENT_NOT_FOUND" }, { status: 404 });
+      operationResult = { comment: { id: String(comments[0].id), body: String(comments[0].body), updatedAt: comments[0].updated_at?.toISOString?.() || String(comments[0].updated_at) } };
+      const commentId = String(comments[0].id);
+      after(async () => { await dispatchCreatorCommentNotifications(commentId).catch(() => undefined); });
+    } else if (body.type === "delete_comment" && typeof body.value === "string") {
+      const deleted = await db()`
+        delete from event_comments ec using listening_events e
+        where ec.listening_event_id = e.id and ec.id::text = ${body.value} and e.tastemaker_id = ${tastemakerId}
+        returning ec.id
+      `;
+      if (!deleted[0]) return NextResponse.json({ error: "COMMENT_NOT_FOUND" }, { status: 404 });
     } else if (body.type === "disconnect") {
       await db()`update music_connections set encrypted_access_token = null, encrypted_refresh_token = null, status = 'disconnected', updated_at = now() where tastemaker_id = ${tastemakerId}`;
       await db()`update tastemakers set status = 'disconnected', publish_enabled = false, updated_at = now() where id = ${tastemakerId}`;
@@ -91,8 +115,6 @@ export async function POST(request: NextRequest) {
       operationResult = body.type === "sync_now"
         ? await syncTastemakerFully(tastemakerId, true)
         : await syncTastemakerPlaylist(tastemakerId);
-    } else if (body.type === "delete_request") {
-      await db()`insert into audit_logs (actor_user_id, action, entity_type, entity_id, metadata) values (${creator.id}, 'data_deletion_requested', 'tastemaker', ${tastemakerId}, ${db().json({ requestedAt: new Date().toISOString() })})`;
     } else return NextResponse.json({ error: "INVALID_ACTION_INPUT" }, { status: 400 });
     if (["hide_event", "restore_event", "hide_artist", "restore_artist", "publish_enabled", "delay"].includes(body.type)) operationResult = await syncTastemakerPlaylist(tastemakerId);
     await audit(creator.id, `creator_${body.type}`, "tastemaker", tastemakerId, { value: typeof body.value === "string" || typeof body.value === "number" || typeof body.value === "boolean" ? body.value : undefined });

@@ -189,3 +189,7 @@ class YandexMusicProvider(MusicHistoryProvider):
             "operations": operations,
             "publicUrl": f"https://music.yandex.ru/users/{uid}/playlists/{kind}",
         }
+
+    def delete_playlist(self, token: str, uid: str, kind: str) -> bool:
+        client = Client(token).init()
+        return bool(client.users_playlists_delete(kind, user_id=uid))

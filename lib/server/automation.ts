@@ -1,7 +1,7 @@
 import "server-only";
 import { db, ensureSchema } from "@/lib/server/db";
 import { connectedTastemakerIds, syncTastemakerFully } from "@/lib/server/sync";
-import { dispatchDailyTelegramNotifications } from "@/lib/server/telegram";
+import { dispatchCreatorCommentNotifications, dispatchDailyTelegramNotifications } from "@/lib/server/telegram";
 
 export type AutomationResult = {
   ok: boolean;
@@ -11,6 +11,7 @@ export type AutomationResult = {
   failed: number;
   results: Array<Record<string, unknown>>;
   telegram: { enabled: boolean; attempted: number; sent: number; failed: number };
+  commentNotifications: { enabled: boolean; attempted: number; sent: number; failed: number };
 };
 
 function safeSource(value: string) {
@@ -38,15 +39,16 @@ export async function runAutomationCycle(sourceValue = "unknown"): Promise<Autom
     }
     const succeeded = results.filter(result => result.ok === true).length;
     const failed = results.length - succeeded;
+    const commentNotifications = await dispatchCreatorCommentNotifications();
     const telegram = await dispatchDailyTelegramNotifications();
-    const status = failed || telegram.failed ? "partial" : "success";
+    const status = failed || telegram.failed || commentNotifications.failed ? "partial" : "success";
     await db()`
       update automation_runs set status = ${status}, tastemakers_total = ${ids.length},
         tastemakers_succeeded = ${succeeded}, tastemakers_failed = ${failed}, telegram_sent = ${telegram.sent},
-        summary = ${db().json({ telegramAttempted: telegram.attempted, telegramFailed: telegram.failed })}, finished_at = now()
+        summary = ${db().json({ telegramAttempted: telegram.attempted, telegramFailed: telegram.failed, commentAttempted: commentNotifications.attempted, commentSent: commentNotifications.sent, commentFailed: commentNotifications.failed })}, finished_at = now()
       where id = ${runId}
     `;
-    return { ok: status === "success", status, tastemakers: ids.length, succeeded, failed, results, telegram };
+    return { ok: status === "success", status, tastemakers: ids.length, succeeded, failed, results, telegram, commentNotifications };
   } catch (error) {
     await db()`
       update automation_runs set status = 'failed', summary = ${db().json({ error: error instanceof Error ? error.message.slice(0, 160) : "AUTOMATION_FAILED" })}, finished_at = now()

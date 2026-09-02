@@ -5,16 +5,16 @@ import { db, ensureSchema } from "@/lib/server/db";
 import { requireRole } from "@/lib/server/session";
 import { sameOrigin } from "@/lib/server/security";
 import { audit } from "@/lib/server/audit";
-import { syncTastemakerFully, syncTastemakerPlaylist } from "@/lib/server/sync";
+import { deleteTastemakerPlaylist, syncTastemakerFully, syncTastemakerPlaylist } from "@/lib/server/sync";
 import { dispatchDailyTelegramNotifications, setupTelegramWebhook } from "@/lib/server/telegram";
 
-const allowed = new Set(["pause", "sync", "playlist_rebuild", "create_tastemaker", "create_invite", "archive", "setup_telegram"]);
+const allowed = new Set(["pause", "sync", "playlist_rebuild", "create_tastemaker", "create_invite", "archive", "delete_tastemaker", "setup_telegram"]);
 
 export async function POST(request: NextRequest) {
   if (!sameOrigin(request)) return NextResponse.json({ error: "INVALID_ORIGIN" }, { status: 403 });
   let admin;
   try { admin = await requireRole("admin"); } catch { return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 }); }
-  const body = await request.json().catch(() => ({})) as { type?: string; tastemakerId?: string; name?: string; slug?: string; roleLine?: string };
+  const body = await request.json().catch(() => ({})) as { type?: string; tastemakerId?: string; name?: string; slug?: string; roleLine?: string; confirmName?: string };
   if (!body.type || !allowed.has(body.type)) return NextResponse.json({ error: "ACTION_NOT_ALLOWED" }, { status: 400 });
   await ensureSchema();
   try {
@@ -68,6 +68,37 @@ export async function POST(request: NextRequest) {
       await db()`update tastemakers set status = 'archived', is_public = false, publish_enabled = false, updated_at = now() where id = ${body.tastemakerId}`;
       await audit(admin.id, "tastemaker_archived", "tastemaker", body.tastemakerId);
       return NextResponse.json({ ok: true });
+    }
+    if (body.type === "delete_tastemaker" && body.tastemakerId) {
+      const tastemakerId = body.tastemakerId;
+      const candidate = await db()`select id, name from tastemakers where id = ${tastemakerId} limit 1`;
+      if (!candidate[0] || String(body.confirmName || "").trim() !== String(candidate[0].name)) {
+        return NextResponse.json({ error: "CONFIRMATION_MISMATCH" }, { status: 409 });
+      }
+      await db()`update tastemakers set status = 'archived', is_public = false, publish_enabled = false, updated_at = now() where id = ${tastemakerId}`;
+      const playlistCleanup = await deleteTastemakerPlaylist(tastemakerId);
+      if (!playlistCleanup.ok) {
+        await audit(admin.id, "tastemaker_delete_playlist_failed", "tastemaker", tastemakerId);
+        return NextResponse.json({ error: "PLAYLIST_DELETE_FAILED", profileHidden: true }, { status: 502 });
+      }
+      const deleted = await db().begin(async sql => {
+        const makers = await sql`select id, name, owner_user_id from tastemakers where id = ${tastemakerId} for update`;
+        const maker = makers[0];
+        if (!maker) return null;
+        await sql`delete from analytics_events where tastemaker_id = ${tastemakerId}`;
+        await sql`delete from tastemakers where id = ${tastemakerId}`;
+        if (maker.owner_user_id) {
+          await sql`
+            update users set role = 'user', updated_at = now()
+            where id = ${maker.owner_user_id} and role = 'creator'
+              and not exists (select 1 from tastemakers where owner_user_id = ${maker.owner_user_id})
+          `;
+        }
+        return { id: String(maker.id), name: String(maker.name) };
+      });
+      if (!deleted) return NextResponse.json({ error: "CONFIRMATION_MISMATCH" }, { status: 409 });
+      await audit(admin.id, "tastemaker_deleted", "tastemaker", deleted.id, { name: deleted.name });
+      return NextResponse.json({ ok: true, id: deleted.id, name: deleted.name });
     }
     return NextResponse.json({ error: "INVALID_ACTION_INPUT" }, { status: 400 });
   } catch (error) {

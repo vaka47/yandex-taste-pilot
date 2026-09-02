@@ -148,7 +148,7 @@ async function consumeStartToken(rawToken: string, message: TelegramMessage) {
   });
   await sendMessage(
     String(message.chat.id),
-    `Готово. Я сообщу, когда <b>${html(result.name)}</b> снова обновит историю — не чаще одного раза в день.\n\nОтключить уведомления можно в профиле автора.`,
+    `Готово! Вы подписались на обновления <a href="${appUrl()}/t/${result.slug}?utm_source=telegram&utm_medium=bot&utm_campaign=connected"><b>${html(result.name)}</b></a>.\n\nКогда в истории появится новая музыка, Taste пришлёт одну дневную сводку. Новые комментарии автора придут сразу.\n\nОтключить уведомления можно в профиле автора или командой /stop.`,
     { label: "Открыть профиль", url: `${appUrl()}/t/${result.slug}?utm_source=telegram&utm_medium=bot&utm_campaign=connected` }
   );
   return result;
@@ -169,10 +169,10 @@ export async function handleTelegramUpdate(update: TelegramUpdate) {
       update telegram_subscriptions ts set active = false, unsubscribed_at = now(), updated_at = now()
       from telegram_accounts ta where ta.user_id = ts.user_id and ta.telegram_user_id = ${String(message.from.id)} and ts.active = true
     `;
-    await sendMessage(String(message.chat.id), "Уведомления остановлены. Их можно снова включить в профиле любого автора в Тейсте.");
+    await sendMessage(String(message.chat.id), "Уведомления остановлены. Их можно снова включить в профиле любого автора в Taste.");
     return { handled: true };
   }
-  await sendMessage(String(message.chat.id), "Откройте профиль автора в Тейсте и нажмите «Уведомлять в Telegram». Команда /stop отключит все уведомления.");
+  await sendMessage(String(message.chat.id), "Откройте профиль автора в Taste и нажмите «Уведомлять в Telegram». Команда /stop отключит все уведомления.");
   return { handled: true };
 }
 
@@ -183,7 +183,7 @@ export async function notifyTelegramUpdateError(update: TelegramUpdate, error: u
   const text = code === "LINK_EXPIRED" || code === "LINK_INVALID"
     ? "Ссылка устарела или уже использована. Вернитесь в профиль автора и нажмите «Уведомлять в Telegram» ещё раз."
     : code === "TELEGRAM_ALREADY_LINKED"
-      ? "Этот Telegram уже связан с другим аккаунтом Тейста. Отключите уведомления командой /stop и войдите в нужный аккаунт."
+      ? "Этот Telegram уже связан с другим аккаунтом Taste. Отключите уведомления командой /stop и войдите в нужный аккаунт."
       : "Не удалось включить уведомления. Получите новую ссылку в профиле автора и попробуйте ещё раз.";
   await sendMessage(String(chatId), text).catch(() => undefined);
 }
@@ -236,8 +236,8 @@ export async function dispatchDailyTelegramNotifications() {
       }
       const rawClickToken = randomToken(24);
       const deliveries = await db()`
-        insert into telegram_deliveries (subscription_id, user_id, tastemaker_id, click_token_hash, event_count)
-        values (${subscription.id}, ${subscription.user_id}, ${subscription.tastemaker_id}, ${hashToken(rawClickToken)}, ${events.length})
+        insert into telegram_deliveries (subscription_id, user_id, tastemaker_id, click_token_hash, event_count, delivery_type)
+        values (${subscription.id}, ${subscription.user_id}, ${subscription.tastemaker_id}, ${hashToken(rawClickToken)}, ${events.length}, 'history_digest')
         returning id
       `;
       const firstArtists = Array.isArray(newest.artist_names) ? newest.artist_names.map(String).join(", ") : "";
@@ -245,7 +245,7 @@ export async function dispatchDailyTelegramNotifications() {
       const trackedUrl = `${appUrl()}/go/telegram/${rawClickToken}`;
       const message = await sendMessage(
         String(subscription.chat_id),
-        `В истории <b>${html(String(subscription.name))}</b> появилась новая музыка.\n\nПоследний трек: <b>${html(String(newest.track_title))}</b>${firstArtists ? ` — ${html(firstArtists)}` : ""}.${more}\n\nЖивой плейлист уже обновлён.`,
+        `У <a href="${appUrl()}/t/${subscription.slug}?utm_source=telegram&utm_medium=notification&utm_campaign=daily_history"><b>${html(String(subscription.name))}</b></a> обновилась история прослушиваний.\n\nПоследний трек: <b>${html(String(newest.track_title))}</b>${firstArtists ? ` — ${html(firstArtists)}` : ""}.${more}\n\nЖивой плейлист уже обновлён.`,
         { label: "Открыть живой плейлист", url: trackedUrl }
       );
       await db().begin(async sql => {
@@ -269,20 +269,86 @@ export async function dispatchDailyTelegramNotifications() {
   return { enabled: true, attempted: subscriptions.length, sent, failed };
 }
 
+export async function dispatchCreatorCommentNotifications(commentId?: string) {
+  if (!telegramNotificationsConfigured()) return { enabled: false, attempted: 0, sent: 0, failed: 0 };
+  await ensureSchema();
+  const subscriptions = await db()`
+    select ts.id as subscription_id, ts.user_id, ts.tastemaker_id, ta.chat_id,
+      ec.id as comment_id, ec.body, e.id as event_id, e.track_title, e.artist_names,
+      t.name, t.slug
+    from event_comments ec
+    join listening_events e on e.id = ec.listening_event_id and e.visibility = 'public' and e.publish_at <= now()
+    join tastemakers t on t.id = ec.tastemaker_id and t.is_public = true and t.status = 'active'
+    join telegram_subscriptions ts on ts.tastemaker_id = t.id and ts.active = true
+    join telegram_accounts ta on ta.user_id = ts.user_id and ta.status = 'active'
+    where ec.is_public = true
+      and (${commentId || null}::text is null or ec.id::text = ${commentId || null})
+      and not exists (
+        select 1 from telegram_deliveries td
+        where td.subscription_id = ts.id and td.comment_id = ec.id and td.delivery_type = 'creator_comment'
+      )
+    order by ec.updated_at asc
+    limit 500
+  `;
+  let sent = 0;
+  let failed = 0;
+  for (const subscription of subscriptions) {
+    const rawClickToken = randomToken(24);
+    const deliveries = await db()`
+      insert into telegram_deliveries (
+        subscription_id, user_id, tastemaker_id, click_token_hash, event_count,
+        delivery_type, listening_event_id, comment_id
+      ) values (
+        ${subscription.subscription_id}, ${subscription.user_id}, ${subscription.tastemaker_id},
+        ${hashToken(rawClickToken)}, 1, 'creator_comment', ${subscription.event_id}, ${subscription.comment_id}
+      )
+      on conflict do nothing
+      returning id
+    `;
+    if (!deliveries[0]) continue;
+    try {
+      const artists = Array.isArray(subscription.artist_names) ? subscription.artist_names.map(String).join(", ") : "";
+      const message = await sendMessage(
+        String(subscription.chat_id),
+        `<a href="${appUrl()}/t/${subscription.slug}?utm_source=telegram&utm_medium=notification&utm_campaign=creator_comment"><b>${html(String(subscription.name))}</b></a> — новый комментарий к треку <b>${html(String(subscription.track_title))}</b>${artists ? ` — ${html(artists)}` : ""}.\n\n«${html(String(subscription.body))}»`,
+        { label: "Открыть трек", url: `${appUrl()}/go/telegram/${rawClickToken}` }
+      );
+      await db()`update telegram_deliveries set status = 'sent', telegram_message_id = ${String(message.message_id)}, sent_at = now() where id = ${deliveries[0].id}`;
+      sent += 1;
+    } catch (error) {
+      const code = error instanceof Error ? error.message.slice(0, 120) : "TELEGRAM_SEND_FAILED";
+      await db()`update telegram_deliveries set status = 'failed', error_code = ${code} where id = ${deliveries[0].id}`;
+      if ((error as Error & { code?: number })?.code === 403) {
+        await db()`update telegram_accounts set status = 'blocked', updated_at = now() where user_id = ${subscription.user_id}`;
+      }
+      failed += 1;
+    }
+  }
+  return { enabled: true, attempted: subscriptions.length, sent, failed };
+}
+
 export async function resolveTelegramDelivery(rawToken: string) {
   await ensureSchema();
   const rows = await db().begin(async sql => {
     const deliveries = await sql`
-      select td.id, td.user_id, td.tastemaker_id, p.public_url
+      select td.id, td.user_id, td.tastemaker_id, td.delivery_type,
+        case when td.delivery_type = 'creator_comment' then e.yandex_url else p.public_url end as destination_url
       from telegram_deliveries td
-      join playlists p on p.tastemaker_id = td.tastemaker_id
-      where td.click_token_hash = ${hashToken(rawToken)} and p.public_url is not null
+      left join playlists p on p.tastemaker_id = td.tastemaker_id
+      left join listening_events e on e.id = td.listening_event_id and e.visibility = 'public' and e.publish_at <= now()
+      where td.click_token_hash = ${hashToken(rawToken)}
+        and case when td.delivery_type = 'creator_comment' then e.yandex_url else p.public_url end is not null
       for update of td
     `;
     if (!deliveries[0]) return [];
     await sql`update telegram_deliveries set status = 'clicked', clicked_at = coalesce(clicked_at, now()) where id = ${deliveries[0].id}`;
     return deliveries;
   });
-  const delivery = rows[0] as { user_id?: unknown; tastemaker_id?: unknown; public_url?: unknown } | undefined;
-  return delivery ? { userId: String(delivery.user_id), tastemakerId: String(delivery.tastemaker_id), publicUrl: String(delivery.public_url) } : null;
+  const delivery = rows[0] as { user_id?: unknown; tastemaker_id?: unknown; delivery_type?: unknown; destination_url?: unknown } | undefined;
+  return delivery ? {
+    userId: String(delivery.user_id),
+    tastemakerId: String(delivery.tastemaker_id),
+    deliveryType: String(delivery.delivery_type),
+    destinationUrl: String(delivery.destination_url)
+  } : null;
 }

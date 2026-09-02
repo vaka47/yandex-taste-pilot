@@ -1,8 +1,8 @@
 import "server-only";
 import { fixtureProfile } from "@/lib/fixtures";
 import { db, ensureSchema, isDatabaseConfigured } from "@/lib/server/db";
-import { telegramNotificationsConfigured } from "@/lib/server/config";
-import type { ListeningEvent, TastemakerProfile } from "@/types/domain";
+import { fixturesEnabled, telegramNotificationsConfigured } from "@/lib/server/config";
+import type { HomeTastemaker, ListeningEvent, PublicActivity, TastemakerProfile } from "@/types/domain";
 
 function rowToEvent(row: Record<string, any>): ListeningEvent {
   return {
@@ -24,7 +24,12 @@ function rowToEvent(row: Record<string, any>): ListeningEvent {
     hiddenReason: row.hidden_reason,
     playCount7d: Number(row.play_count_7d || 1),
     consecutiveCount: Number(row.consecutive_count || 1),
-    firstSeenAt: row.first_seen_at?.toISOString?.() || row.first_seen_at || row.fetched_at?.toISOString?.() || row.fetched_at
+    firstSeenAt: row.first_seen_at?.toISOString?.() || row.first_seen_at || row.fetched_at?.toISOString?.() || row.fetched_at,
+    comment: row.comment_id ? {
+      id: String(row.comment_id),
+      body: String(row.comment_body),
+      updatedAt: row.comment_updated_at?.toISOString?.() || String(row.comment_updated_at)
+    } : null
   };
 }
 
@@ -44,10 +49,10 @@ function publicEventsFromRows(rows: Array<Record<string, any>>) {
 
 export async function getPublicProfile(slug: string, viewerId: string | null): Promise<TastemakerProfile | null> {
   if (!isDatabaseConfigured()) {
-    if (![fixtureProfile.slug, "demo", "lera"].includes(slug)) return null;
+    if (!fixturesEnabled() || slug !== fixtureProfile.slug) return null;
     return viewerId
       ? { ...fixtureProfile, historyAccess: "full" }
-      : { ...fixtureProfile, historyAccess: "teaser", events: [], viewerFollows: false };
+      : { ...fixtureProfile, historyAccess: "teaser", events: fixtureProfile.events.slice(0, 3), viewerFollows: false };
   }
   await ensureSchema();
   const profileRows = await db()`
@@ -82,7 +87,7 @@ export async function getPublicProfile(slug: string, viewerId: string | null): P
   const row = profileRows[0];
   if (!row) return null;
   const events = await db()`
-    select e.*,
+    select e.*, ec.id as comment_id, ec.body as comment_body, ec.updated_at as comment_updated_at,
       count(*) filter (where coalesce(
         e.observed_at,
         case when coalesce(e.raw_metadata->>'observedDate', '') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then (e.raw_metadata->>'observedDate')::date::timestamptz end,
@@ -97,6 +102,7 @@ export async function getPublicProfile(slug: string, viewerId: string | null): P
           and fe.visibility = 'public' and fe.publish_at <= now()
       ) as first_seen_at
     from listening_events e
+    left join event_comments ec on ec.listening_event_id = e.id and ec.is_public = true
     where e.tastemaker_id = ${row.id}
       and e.visibility = 'public'
       and e.publish_at <= now()
@@ -112,7 +118,7 @@ export async function getPublicProfile(slug: string, viewerId: string | null): P
         e.fetched_at
       ) desc,
       case when coalesce(e.raw_metadata->>'providerPosition', '') ~ '^[0-9]+$' then (e.raw_metadata->>'providerPosition')::int end asc nulls last
-    limit ${viewerId ? 80 : 0}
+    limit ${viewerId ? 80 : 3}
   `;
   return {
     id: row.id, slug: row.slug, name: row.name, bio: row.bio, roleLine: row.role_line,
@@ -133,7 +139,7 @@ export async function getPublicProfile(slug: string, viewerId: string | null): P
 }
 
 export async function getFeaturedPublicProfile(viewerId: string | null): Promise<TastemakerProfile | null> {
-  if (!isDatabaseConfigured()) return getPublicProfile(fixtureProfile.slug, viewerId);
+  if (!isDatabaseConfigured()) return fixturesEnabled() ? getPublicProfile(fixtureProfile.slug, viewerId) : null;
   await ensureSchema();
   const rows = await db()`
     select slug from tastemakers
@@ -146,6 +152,7 @@ export async function getFeaturedPublicProfile(viewerId: string | null): Promise
 
 export async function getPublicEvent(eventId: string) {
   if (!isDatabaseConfigured()) {
+    if (!fixturesEnabled()) return null;
     const event = fixtureProfile.events.find(value => value.id === eventId);
     return event ? { event, tastemakerId: fixtureProfile.id } : null;
   }
@@ -160,7 +167,7 @@ export async function getPublicEvent(eventId: string) {
 }
 
 export async function getPlaylistDestination(tastemakerId: string, viewerId: string) {
-  if (!isDatabaseConfigured()) return tastemakerId === fixtureProfile.id ? fixtureProfile.playlistUrl : null;
+  if (!isDatabaseConfigured()) return fixturesEnabled() && tastemakerId === fixtureProfile.id ? fixtureProfile.playlistUrl : null;
   await ensureSchema();
   const rows = await db()`
     select p.public_url from playlists p
@@ -230,4 +237,104 @@ export async function getFollowingProfiles(userId: string) {
     avatarUrl: (row.avatar_url as string | null) || null,
     latestEvent: row.event_id ? rowToEvent({ ...row, id: row.event_id, play_count_7d: 1 }) : null
   }));
+}
+
+export async function getHomeDiscoveryData(): Promise<{ profiles: HomeTastemaker[]; activity: PublicActivity[] }> {
+  if (!isDatabaseConfigured()) {
+    if (!fixturesEnabled()) return { profiles: [], activity: [] };
+    const event = fixtureProfile.events[0];
+    return {
+      profiles: [{
+        id: fixtureProfile.id,
+        slug: fixtureProfile.slug,
+        name: fixtureProfile.name,
+        roleLine: fixtureProfile.roleLine,
+        avatarUrl: fixtureProfile.avatarUrl,
+        latestTrack: event ? { title: event.track.title, artists: event.track.artists } : null,
+        updatedAt: event?.observedAt || event?.fetchedAt || null
+      }],
+      activity: event ? [{
+        id: event.id,
+        kind: "listen",
+        tastemakerName: fixtureProfile.name,
+        tastemakerSlug: fixtureProfile.slug,
+        trackTitle: event.track.title,
+        artists: event.track.artists,
+        comment: event.comment?.body || null,
+        eventId: event.id,
+        occurredAt: event.observedAt || event.fetchedAt
+      }] : []
+    };
+  }
+  await ensureSchema();
+  const [profileRows, listenRows, commentRows] = await Promise.all([
+    db()`
+      select t.id, t.slug, t.name, t.role_line, t.avatar_url,
+        e.track_title, e.artist_names,
+        coalesce(e.observed_at, e.fetched_at) as latest_at
+      from tastemakers t
+      left join lateral (
+        select track_title, artist_names, observed_at, fetched_at
+        from listening_events
+        where tastemaker_id = t.id and visibility = 'public' and publish_at <= now()
+        order by coalesce(observed_at, fetched_at) desc
+        limit 1
+      ) e on true
+      where t.is_public = true and t.status = 'active'
+      order by verified desc, coalesce(e.observed_at, e.fetched_at, t.updated_at) desc
+    `,
+    db()`
+      select e.id, e.track_title, e.artist_names, t.name, t.slug,
+        coalesce(e.observed_at, e.fetched_at) as occurred_at
+      from listening_events e
+      join tastemakers t on t.id = e.tastemaker_id and t.is_public = true and t.status = 'active'
+      where e.visibility = 'public' and e.publish_at <= now()
+      order by coalesce(e.observed_at, e.fetched_at) desc
+      limit 12
+    `,
+    db()`
+      select ec.id, ec.body, ec.updated_at as occurred_at, e.id as event_id,
+        e.track_title, e.artist_names, t.name, t.slug
+      from event_comments ec
+      join listening_events e on e.id = ec.listening_event_id and e.visibility = 'public' and e.publish_at <= now()
+      join tastemakers t on t.id = ec.tastemaker_id and t.is_public = true and t.status = 'active'
+      where ec.is_public = true
+      order by ec.updated_at desc
+      limit 12
+    `
+  ]);
+  const profiles = profileRows.map(row => ({
+    id: String(row.id),
+    slug: String(row.slug),
+    name: String(row.name),
+    roleLine: String(row.role_line),
+    avatarUrl: row.avatar_url ? String(row.avatar_url) : null,
+    latestTrack: row.track_title ? { title: String(row.track_title), artists: Array.isArray(row.artist_names) ? row.artist_names.map(String) : [] } : null,
+    updatedAt: row.latest_at?.toISOString?.() || (row.latest_at ? String(row.latest_at) : null)
+  }));
+  const activity: PublicActivity[] = [
+    ...listenRows.map(row => ({
+      id: `listen-${String(row.id)}`,
+      kind: "listen" as const,
+      tastemakerName: String(row.name),
+      tastemakerSlug: String(row.slug),
+      trackTitle: String(row.track_title),
+      artists: Array.isArray(row.artist_names) ? row.artist_names.map(String) : [],
+      comment: null,
+      eventId: String(row.id),
+      occurredAt: row.occurred_at?.toISOString?.() || String(row.occurred_at)
+    })),
+    ...commentRows.map(row => ({
+      id: `comment-${String(row.id)}`,
+      kind: "comment" as const,
+      tastemakerName: String(row.name),
+      tastemakerSlug: String(row.slug),
+      trackTitle: String(row.track_title),
+      artists: Array.isArray(row.artist_names) ? row.artist_names.map(String) : [],
+      comment: String(row.body),
+      eventId: String(row.event_id),
+      occurredAt: row.occurred_at?.toISOString?.() || String(row.occurred_at)
+    }))
+  ].sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt)).slice(0, 12);
+  return { profiles, activity };
 }

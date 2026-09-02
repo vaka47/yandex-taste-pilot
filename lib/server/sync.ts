@@ -18,7 +18,7 @@ type NormalizedProviderEvent = {
   yandexUrl: string;
 };
 
-const errorCodes = new Set(["AUTH_EXPIRED", "AUTH_REVOKED", "DEVICE_FLOW_EXPIRED", "RATE_LIMITED", "HISTORY_FETCH_FAILED", "PLAYLIST_FETCH_FAILED", "PLAYLIST_MUTATION_CONFLICT", "PROVIDER_SCHEMA_CHANGED"]);
+const errorCodes = new Set(["AUTH_EXPIRED", "AUTH_REVOKED", "DEVICE_FLOW_EXPIRED", "RATE_LIMITED", "HISTORY_FETCH_FAILED", "PLAYLIST_FETCH_FAILED", "PLAYLIST_DELETE_FAILED", "PLAYLIST_MUTATION_CONFLICT", "PROVIDER_SCHEMA_CHANGED"]);
 
 function normalizedError(error: unknown, fallback: string) {
   const message = error instanceof Error ? error.message : fallback;
@@ -69,9 +69,19 @@ export async function syncTastemakerHistory(tastemakerId: string, force = false)
           ${db().json(event.artistNames)}, ${db().json(event.artistProviderIds || [])}, ${event.coverUrl}, ${coverTone(event.trackProviderId)}, ${event.yandexUrl},
           ${event.observedAt ? new Date(event.observedAt) : null}, now(), ${publishAt}, ${visibility}, ${privacyReason},
           ${db().json({ observedDate: event.observedDate, providerPosition: event.providerPosition })}
-        ) on conflict (tastemaker_id, provider_event_key) do nothing returning id
+        ) on conflict (tastemaker_id, provider_event_key) do update set
+          track_provider_id = excluded.track_provider_id,
+          album_provider_id = coalesce(excluded.album_provider_id, listening_events.album_provider_id),
+          track_title = excluded.track_title,
+          artist_names = excluded.artist_names,
+          artist_provider_ids = excluded.artist_provider_ids,
+          cover_url = coalesce(excluded.cover_url, listening_events.cover_url),
+          yandex_url = excluded.yandex_url,
+          observed_at = coalesce(excluded.observed_at, listening_events.observed_at),
+          raw_metadata = listening_events.raw_metadata || excluded.raw_metadata
+        returning (xmax = 0) as inserted
       `;
-      inserted += rows.length;
+      inserted += rows[0]?.inserted ? 1 : 0;
     }
     await db()`update music_connections set last_success_at = now(), last_error_at = null, last_error_code = null, sync_locked_until = null, updated_at = now() where tastemaker_id = ${tastemakerId}`;
     await db()`update sync_logs set status = 'success', finished_at = now(), stats = ${db().json({ fetched: result.events.length, inserted })} where id = ${logId}`;
@@ -134,6 +144,25 @@ export async function syncTastemakerPlaylist(tastemakerId: string) {
     await db()`insert into playlists (tastemaker_id, last_error) values (${tastemakerId}, ${code}) on conflict (tastemaker_id) do update set last_error = excluded.last_error, updated_at = now()`;
     await db()`update sync_logs set status = 'failed', finished_at = now(), error_code = ${code}, error_message = ${code} where id = ${logRows[0].id}`;
     return { ok: false, skipped: false, error: code };
+  }
+}
+
+export async function deleteTastemakerPlaylist(tastemakerId: string) {
+  await ensureSchema();
+  const playlistRows = await db()`select provider_uid, provider_kind from playlists where tastemaker_id = ${tastemakerId} limit 1`;
+  const playlist = playlistRows[0];
+  if (!playlist?.provider_uid || !playlist?.provider_kind) return { ok: true, skipped: true, reason: "not_created" };
+  const token = await serviceMusicToken();
+  if (!token) return { ok: false, skipped: true, error: "PLAYLIST_DELETE_FAILED" };
+  try {
+    await connectorRequest<{ deleted: boolean }>("/internal/yandex-music/playlist/delete", {
+      token,
+      uid: String(playlist.provider_uid),
+      kind: String(playlist.provider_kind)
+    });
+    return { ok: true, skipped: false };
+  } catch {
+    return { ok: false, skipped: false, error: "PLAYLIST_DELETE_FAILED" };
   }
 }
 

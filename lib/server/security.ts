@@ -26,3 +26,12 @@ export function inMemoryRateLimit(key: string, limit: number, windowMs: number) 
   return true;
 }
 
+export function yandexMusicDestination(value: string) {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.hostname.toLowerCase() !== "music.yandex.ru") return null;
+    return url;
+  } catch {
+    return null;
+  }
+}

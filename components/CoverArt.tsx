@@ -1,10 +1,8 @@
-export function CoverArt({ tone, title, size = "regular" }: { tone: string; title: string; size?: "small" | "regular" | "large" }) {
+export function CoverArt({ url, title, size = "regular" }: { url: string | null; title: string; size?: "small" | "regular" | "large" }) {
+  if (!url) return null;
   return (
-    <span className={`coverArt cover-${tone} cover-${size}`} aria-label={`Обложка ${title}`} role="img">
-      <i className="coverOrb" />
-      <i className="coverLine" />
-      <b>{title.slice(0, 1)}</b>
+    <span className={`coverArt cover-${size}`} aria-hidden="true">
+      <img src={url} alt="" loading="lazy" decoding="async" />
     </span>
   );
 }
-

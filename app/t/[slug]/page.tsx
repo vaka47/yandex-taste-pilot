@@ -27,9 +27,9 @@ export default async function TastemakerPage({ params }: { params: Promise<{ slu
       <PublicHeader session={session} />
       <ProfileClient initialProfile={profile} session={session} ownerView={Boolean(session?.role === "admin" && session.authContext === "owner_password" && isAdminYandexId(session.yandexId))} />
       <footer className="publicFooter">
-        <div><strong>Тейст</strong><span>Музыкальный вкус — это сигнал, а не алгоритм.</span></div>
-        <nav><a href="/about">О продукте</a><a href="/privacy">Приватность</a><a href="mailto:privacy@tastepilot.app">Удаление данных</a></nav>
-        <p>Независимый экспериментальный продукт. Не связан с Яндексом и не одобрен им. Переход к треку означает намерение открыть музыку, а не подтверждённое прослушивание.</p>
+        <div><strong>Taste</strong><span>Музыкальный вкус — это сигнал, а не алгоритм.</span></div>
+        <nav><a href="/about">О продукте</a><a href="/privacy">Приватность</a><a href="mailto:camp@navumi.com">camp@navumi.com</a></nav>
+        <p>Независимый продукт. Не связан с Яндексом и не одобрен им.</p>
       </footer>
     </div>
   );

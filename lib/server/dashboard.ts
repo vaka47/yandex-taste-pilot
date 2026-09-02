@@ -119,7 +119,12 @@ function eventFromRow(row: Record<string, any>): ListeningEvent {
     hiddenReason: row.hidden_reason ? String(row.hidden_reason) : null,
     playCount7d: Number(row.play_count_7d || 1),
     consecutiveCount: Number(row.consecutive_count || 1),
-    firstSeenAt: iso(row.first_seen_at) || iso(row.fetched_at) || new Date(0).toISOString()
+    firstSeenAt: iso(row.first_seen_at) || iso(row.fetched_at) || new Date(0).toISOString(),
+    comment: row.comment_id ? {
+      id: String(row.comment_id),
+      body: String(row.comment_body),
+      updatedAt: iso(row.comment_updated_at) || new Date(0).toISOString()
+    } : null
   };
 }
 
@@ -385,9 +390,12 @@ export async function getCreatorDashboardData(userId: string, role: Role): Promi
   if (!maker) return null;
   const [events, analytics, blockedArtists] = await Promise.all([
     db()`
-      select e.*, count(*) over (partition by e.track_provider_id)::int as play_count_7d,
+      select e.*, ec.id as comment_id, ec.body as comment_body, ec.updated_at as comment_updated_at,
+        count(*) over (partition by e.track_provider_id)::int as play_count_7d,
         min(e.observed_at) over (partition by e.track_provider_id) as first_seen_at
-      from listening_events e where e.tastemaker_id = ${maker.id}
+      from listening_events e
+      left join event_comments ec on ec.listening_event_id = e.id and ec.is_public = true
+      where e.tastemaker_id = ${maker.id}
       order by coalesce(e.observed_at, e.fetched_at) desc limit 80
     `,
     db()`
