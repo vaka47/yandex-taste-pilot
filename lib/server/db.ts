@@ -83,6 +83,7 @@ async function createSchema() {
       fixture boolean not null default false,
       consent_version text,
       consent_at timestamptz,
+      creator_onboarding_seen_at timestamptz,
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now()
     )
@@ -395,6 +396,7 @@ async function createSchema() {
   await sql`alter table sessions add column if not exists auth_context text not null default 'yandex'`;
   await sql`alter table tastemakers add column if not exists sync_interval_seconds integer not null default 60`;
   await sql`alter table tastemakers add column if not exists gender text not null default 'neutral'`;
+  await sql`alter table tastemakers add column if not exists creator_onboarding_seen_at timestamptz`;
   await sql`alter table tastemakers alter column publication_delay_seconds set default 0`;
   await sql`create table if not exists schema_migrations (version text primary key, applied_at timestamptz not null default now())`;
   await sql.begin(async transaction => {

@@ -6,6 +6,7 @@ from yandex_music import Client
 
 from .base import ConnectionResult, DeviceChallenge, MusicHistoryProvider
 from .history_keys import occurrence_ranks_from_oldest, stable_event_key
+from .playlist_diff import build_replace_diff
 
 
 def _model_value(model: Any, name: str, default: Any = None) -> Any:
@@ -141,10 +142,18 @@ class YandexMusicProvider(MusicHistoryProvider):
         desired = payload.get("tracks") or []
 
         if kind is None:
-            playlist = client.users_playlists_create(title=title, visibility="public", user_id=uid)
-            if playlist is None:
+            # A web request may time out after Yandex has already created the playlist.
+            # Reuse the newest exact-title match so retries do not create duplicates.
+            matches = [item for item in (client.users_playlists_list(user_id=uid) or []) if _model_value(item, "title") == title]
+            match = max(matches, key=lambda item: str(_model_value(item, "modified", ""))) if matches else None
+            if match is not None:
+                kind = _model_value(match, "kind")
+                playlist = client.users_playlists(kind=kind, user_id=uid)
+            else:
+                playlist = client.users_playlists_create(title=title, visibility="public", user_id=uid)
+                kind = _model_value(playlist, "kind")
+            if playlist is None or kind is None:
                 raise RuntimeError("PLAYLIST_CREATE_FAILED")
-            kind = playlist.kind
         else:
             playlist = client.users_playlists(kind=kind, user_id=uid)
             if playlist is None:
@@ -152,33 +161,14 @@ class YandexMusicProvider(MusicHistoryProvider):
 
         current = [str(_model_value(_model_value(track_short, "track"), "id")) for track_short in (playlist.tracks or [])]
         revision = int(playlist.revision or 1)
+        wanted = [str(item["trackId"]) for item in desired]
         operations = 0
-
-        for index, item in enumerate(desired):
-            wanted = str(item["trackId"])
-            if index < len(current) and current[index] == wanted:
-                continue
-            if wanted in current[index:]:
-                found = current.index(wanted, index)
-                playlist = client.users_playlists_delete_track(kind, found, found + 1, revision=revision, user_id=uid)
-                if playlist is None:
-                    raise RuntimeError("PLAYLIST_MUTATION_CONFLICT")
-                revision = int(playlist.revision or revision + 1)
-                current.pop(found)
-                operations += 1
-            playlist = client.users_playlists_insert_track(kind, item["trackId"], item["albumId"], at=index, revision=revision, user_id=uid)
+        if current != wanted:
+            diff, operations = build_replace_diff(len(current), desired)
+            playlist = client.users_playlists_change(kind, diff, revision=revision, user_id=uid)
             if playlist is None:
                 raise RuntimeError("PLAYLIST_MUTATION_CONFLICT")
             revision = int(playlist.revision or revision + 1)
-            current.insert(index, wanted)
-            operations += 1
-
-        if len(current) > len(desired):
-            playlist = client.users_playlists_delete_track(kind, len(desired), len(current), revision=revision, user_id=uid)
-            if playlist is None:
-                raise RuntimeError("PLAYLIST_MUTATION_CONFLICT")
-            revision = int(playlist.revision or revision + 1)
-            operations += 1
 
         client.users_playlists_visibility(kind, "public", user_id=uid)
         return {

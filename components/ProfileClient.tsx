@@ -239,13 +239,13 @@ export function ProfileClient({ initialProfile, session }: { initialProfile: Tas
 
           <div className="heroCopy">
             <div className="eyebrowRow"><span className="eyebrow"><i />{profile.lastSyncAt ? `обновлено ${relativeTime(profile.lastSyncAt)}` : "история включена"}</span></div>
-            <h1>Что слушает<br /><span>{profile.name}</span></h1>
+            <h1 className="profileHeadline"><span className="profileHeadlineLead">Что слушает</span><span>{profile.name}</span></h1>
             {profile.roleLine || profile.verified ? <div className="identityLine">{profile.roleLine ? <strong>{profile.roleLine}</strong> : null}{profile.verified ? <i className="verified"><Icon name="check" size={12} /></i> : null}</div> : null}
             {profile.bio ? <p>{profile.bio}</p> : null}
             <div className={`heroActions ${!session ? "anonymousActions" : ""}`}>
               <button ref={primaryFollowRef} className={`primaryAction ${profile.viewerFollows ? "isFollowing" : ""}`} type="button" onClick={() => void follow()}><Icon name={profile.viewerFollows ? "check" : "pulse"} />{profile.viewerFollows ? "Вы подписаны" : "Подписаться"}</button>
               {profile.viewerFollows && profile.playlistUrl ? <a className="playlistAction" href={`/go/playlist/${profile.id}`} target="_blank" rel="noreferrer"><Icon name="playlist" /> Плейлист в Яндекс Музыке <Icon name="arrow" size={17} /></a> : null}
-              {!telegramState.subscribed ? <button className="heroTelegramAction" type="button" disabled={telegramBusy || !telegramState.available} onClick={() => void connectTelegram()}><Icon name="send" /><span>{telegramBusy ? "Подключаем Telegram…" : "Получать обновления в Telegram"}</span><Icon name="arrow" size={17} /></button> : null}
+              {!telegramState.subscribed ? <button className="heroTelegramAction" type="button" disabled={telegramBusy || !telegramState.available} onClick={() => void connectTelegram()}><span className="telegramActionLabel"><Icon name="send" /><span>{telegramBusy ? "Подключаем Telegram…" : "Получать обновления в Telegram"}</span></span><Icon name="arrow" size={17} /></button> : null}
             </div>
             <div className="heroTrust"><Icon name="shield" size={18} /><span>История публикуется с разрешения Саундмейкера.</span></div>
           </div>
@@ -289,7 +289,7 @@ export function ProfileClient({ initialProfile, session }: { initialProfile: Tas
 
         <section className={`telegramInvite ${telegramState.subscribed ? "isActive" : ""}`}>
           <span className="telegramInviteIcon"><Icon name="send" /></span>
-          <div><small>обновления без лишнего шума</small><h2>{telegramState.subscribed ? `Вы получаете новости о ${profile.name}` : "Узнавайте о новой музыке в Telegram"}</h2><p>{telegramState.subscribed ? "Дневная сводка придёт в вашем персональном слоте с 12:00 до 21:00 по Москве, а комментарии Саундмейкера — сразу." : `Taste назначит отдельный дневной слот с 12:00 до 21:00 по Москве и пришлёт одну сводку, если ${profile.name} слушал новую музыку. Комментарии приходят сразу.`}</p></div>
+          <div><small>обновления без лишнего шума</small><h2>{telegramState.subscribed ? `Вы получаете новости о ${profile.name}` : "Узнавайте о новой музыке в Telegram"}</h2><p>{telegramState.subscribed ? "Дневная сводка придёт в вашем персональном слоте с 12:00 до 21:00 по Москве, а комментарии Саундмейкера — сразу." : "Taste назначит отдельный дневной слот с 12:00 до 21:00 по Москве и пришлёт одну сводку, если история Саундмейкера обновилась. Комментарии приходят сразу."}</p></div>
           <button type="button" disabled={telegramBusy || (!telegramState.available && !telegramState.subscribed)} onClick={() => void (telegramState.subscribed ? disconnectTelegram() : connectTelegram())}>{telegramBusy ? "Подключаем…" : telegramState.subscribed ? "Отключить" : telegramState.available ? "Получать уведомления" : "Скоро"}<Icon name="arrow" /></button>
         </section>
       </main>

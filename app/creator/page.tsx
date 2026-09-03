@@ -19,5 +19,5 @@ export default async function CreatorPage({ searchParams }: { searchParams: Prom
     const tastemakerId = data.id;
     after(() => syncTastemakerFully(tastemakerId).catch(() => undefined));
   }
-  return <WorkspaceShell area="creator" profileHref={data ? `/t/${data.slug}` : "/"}><CreatorDashboardClient initialData={data} autoConnect={onboarding === "music" && data?.connection.status !== "connected"} /></WorkspaceShell>;
+  return <WorkspaceShell area="creator" profileHref={data ? `/t/${data.slug}` : "/"}><CreatorDashboardClient initialData={data} showOnboarding={onboarding === "welcome" && !data?.onboardingSeenAt} /></WorkspaceShell>;
 }

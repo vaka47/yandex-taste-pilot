@@ -31,11 +31,11 @@ export function PublicHeader({ session, landing = false }: { session: SessionUse
       <Brand />
       <nav className="desktopHeaderNav" aria-label="Основная навигация">
         {landing ? <a href="#discover">Саундмейкеры</a> : session ? <Link href="/following">Мои подписки</Link> : <Link href="/#discover">Саундмейкеры</Link>}
-        {canOpenCreatorCabinet ? <Link href="/creator">Кабинет</Link> : null}
         <Link href="/about">Как это работает</Link>
         <Link href="/privacy">Приватность</Link>
       </nav>
       <div className={`headerActions ${landing ? "landingHeaderActions" : ""}`}>
+        {canOpenCreatorCabinet ? <Link className="creatorHeaderLink" href="/creator"><Icon name="music" size={16} />Кабинет Саундмейкера</Link> : null}
         {landing ? session ? <Link className="headerAccountLink" href="/following"><Icon name="user" size={16} />Мои подписки</Link> : <Link className="headerAccountLink" href="/auth/yandex/start?returnTo=/"><Icon name="user" size={16} />Войти</Link> : session ? <form action="/auth/logout" method="post"><button className="headerLogin" type="submit"><Icon name="user" size={17} /> Выйти</button></form> : <Link className="headerLogin" href="/auth/yandex/start?returnTo=/"><Icon name="user" size={17} /> Войти</Link>}
         {landing ? <a className="landingHeaderCta" href="#discover">Найти Саундмейкера <Icon name="arrow" /></a> : null}
       </div>

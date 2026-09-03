@@ -51,31 +51,62 @@ function expiresLabel(value: string | null) {
   return days === 1 ? "через 1 день" : `через ${days} дн.`;
 }
 
+function imageFromFile(file: File) {
+  return new Promise<{ image: HTMLImageElement; release: () => void }>((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.decoding = "async";
+    image.onload = () => resolve({ image, release: () => URL.revokeObjectURL(url) });
+    image.onerror = () => { URL.revokeObjectURL(url); reject(new Error("IMAGE_DECODE_FAILED")); };
+    image.src = url;
+  });
+}
+
 async function prepareSquareAvatar(file: File) {
-  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 10_000_000) throw new Error("INVALID_IMAGE");
-  const bitmap = await createImageBitmap(file);
+  const looksLikeImage = file.type.startsWith("image/") || /\.(jpe?g|png|webp|heic|heif)$/i.test(file.name);
+  if (!looksLikeImage || file.size < 100 || file.size > 15_000_000) throw new Error("INVALID_IMAGE");
+  let source: ImageBitmap | HTMLImageElement;
+  let width: number;
+  let height: number;
+  let release: () => void = () => undefined;
+  try {
+    if (typeof createImageBitmap !== "function") throw new Error("IMAGE_BITMAP_UNAVAILABLE");
+    const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+    source = bitmap;
+    width = bitmap.width;
+    height = bitmap.height;
+    release = () => bitmap.close();
+  } catch {
+    const decoded = await imageFromFile(file);
+    source = decoded.image;
+    width = decoded.image.naturalWidth;
+    height = decoded.image.naturalHeight;
+    release = decoded.release;
+  }
+  if (!width || !height) { release(); throw new Error("IMAGE_DECODE_FAILED"); }
   const size = 720;
   const canvas = document.createElement("canvas");
   canvas.width = size;
   canvas.height = size;
   const context = canvas.getContext("2d");
-  if (!context) throw new Error("CANVAS_UNAVAILABLE");
-  const scale = Math.max(size / bitmap.width, size / bitmap.height);
-  const width = bitmap.width * scale;
-  const height = bitmap.height * scale;
-  context.drawImage(bitmap, (size - width) / 2, (size - height) / 2, width, height);
-  bitmap.close();
-  const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, "image/webp", .88));
+  if (!context) { release(); throw new Error("CANVAS_UNAVAILABLE"); }
+  const scale = Math.max(size / width, size / height);
+  const outputWidth = width * scale;
+  const outputHeight = height * scale;
+  context.drawImage(source, (size - outputWidth) / 2, (size - outputHeight) / 2, outputWidth, outputHeight);
+  release();
+  let blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, "image/webp", .86));
+  if (!blob || blob.type !== "image/webp") blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, "image/jpeg", .88));
   if (!blob) throw new Error("IMAGE_PROCESSING_FAILED");
-  return new File([blob], "taste-avatar.webp", { type: "image/webp" });
+  return new File([blob], blob.type === "image/webp" ? "taste-avatar.webp" : "taste-avatar.jpg", { type: blob.type });
 }
 
-export function CreatorDashboardClient({ initialData, autoConnect = false }: { initialData: CreatorDashboardData | null; autoConnect?: boolean }) {
+export function CreatorDashboardClient({ initialData, showOnboarding = false }: { initialData: CreatorDashboardData | null; showOnboarding?: boolean }) {
   if (!initialData) return <section className="workspaceEmpty"><Icon name="users" /><h1>Профиль ещё не назначен</h1><p>Откройте персональную ссылку-приглашение, которую прислал владелец Taste.</p></section>;
-  return <CreatorDashboard data={initialData} autoConnect={autoConnect} />;
+  return <CreatorDashboard data={initialData} showOnboarding={showOnboarding} />;
 }
 
-function CreatorDashboard({ data, autoConnect }: { data: CreatorDashboardData; autoConnect: boolean }) {
+function CreatorDashboard({ data, showOnboarding }: { data: CreatorDashboardData; showOnboarding: boolean }) {
   const [paused, setPaused] = useState(data.status === "paused");
   const [delay, setDelay] = useState(delayOptions.some(option => option.value === data.publicationDelaySeconds) ? data.publicationDelaySeconds : 0);
   const [syncInterval, setSyncInterval] = useState(data.syncIntervalSeconds);
@@ -97,10 +128,9 @@ function CreatorDashboard({ data, autoConnect }: { data: CreatorDashboardData; a
   const [commentEditor, setCommentEditor] = useState<string | null>(null);
   const [commentDraft, setCommentDraft] = useState("");
   const connectionCheckInFlight = useRef(false);
-
-  useEffect(() => {
-    if (autoConnect && data.connection.status !== "connected") setConnectOpen(true);
-  }, [autoConnect, data.connection.status]);
+  const connectionCodeInput = useRef<HTMLInputElement>(null);
+  const [codeCopied, setCodeCopied] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState<number | null>(showOnboarding ? 0 : null);
 
   async function checkConnection(target: Challenge) {
     if (connectionCheckInFlight.current) return;
@@ -122,6 +152,40 @@ function CreatorDashboard({ data, autoConnect }: { data: CreatorDashboardData; a
     } finally {
       connectionCheckInFlight.current = false;
     }
+  }
+
+  function rememberOnboarding() {
+    void fetch("/api/creator/onboarding", { method: "POST", keepalive: true }).catch(() => undefined);
+    window.history.replaceState(null, "", "/creator");
+  }
+
+  function finishOnboarding(openConnection: boolean) {
+    setOnboardingStep(null);
+    rememberOnboarding();
+    if (openConnection && data.connection.status !== "connected") setConnectOpen(true);
+    else if (openConnection) {
+      setProfileDraft(profile);
+      setEditOpen(true);
+    }
+  }
+
+  async function copyConnectionCode() {
+    if (!challenge) return;
+    const input = connectionCodeInput.current;
+    let copied = false;
+    if (input) {
+      input.focus({ preventScroll: true });
+      input.select();
+      input.setSelectionRange(0, input.value.length);
+      try { copied = document.execCommand("copy"); } catch { copied = false; }
+    }
+    if (!copied && navigator.clipboard?.writeText) {
+      try { await navigator.clipboard.writeText(challenge.userCode); copied = true; } catch { copied = false; }
+    }
+    setCodeCopied(copied);
+    setNotice(copied
+      ? { tone: "success", text: "Код скопирован. Теперь откройте Яндекс и вставьте его." }
+      : { tone: "warning", text: "Код выделен. Выберите «Скопировать» в меню браузера, затем откройте Яндекс." });
   }
 
   useEffect(() => {
@@ -167,6 +231,7 @@ function CreatorDashboard({ data, autoConnect }: { data: CreatorDashboardData; a
 
   async function startConnection() {
     setNotice(null);
+    setCodeCopied(false);
     setConnectionState("starting");
     const response = await fetch("/api/creator/music/connect/start", { method: "POST" });
     const payload = await response.json().catch(() => ({})) as Challenge & { error?: string };
@@ -191,7 +256,7 @@ function CreatorDashboard({ data, autoConnect }: { data: CreatorDashboardData; a
       setAvatarUrl(payload.avatarUrl);
       setNotice({ tone: "success", text: "Фото профиля обновлено." });
     } catch {
-      setNotice({ tone: "error", text: "Не удалось загрузить фото. Выберите JPG, PNG или WebP до 10 МБ." });
+      setNotice({ tone: "error", text: "Не удалось подготовить фото. Выберите снимок из медиатеки в JPG, PNG, WebP или HEIC до 15 МБ." });
     } finally {
       setAvatarBusy(false);
       if (avatarInput.current) avatarInput.current.value = "";
@@ -307,6 +372,13 @@ function CreatorDashboard({ data, autoConnect }: { data: CreatorDashboardData; a
   }
 
   const connectionStatus = connectionState === "connected" ? "connected" : connectionState === "error" ? "error" : data.connection.status;
+  const onboardingSlides = [
+    { label: "добро пожаловать в Taste", title: `${profile.name}, это ваша музыкальная страница`, text: "Покажем главное за минуту. Эти подсказки появятся только сейчас — дальше вас встретит обычный кабинет.", icon: "spark" as const },
+    { label: "01 / 03 · источник истории", title: "Подключите аккаунт, где слушаете музыку", text: "Яндекс попросит отдельное подтверждение. После него новые записи будут автоматически появляться в Taste и живом плейлисте.", icon: "music" as const },
+    { label: "02 / 03 · ваша страница", title: "Добавьте фото и проверьте подпись", text: "Квадратное фото, короткое представление и пара строк о себе помогут слушателям понять, чей вкус они открывают.", icon: "user" as const },
+    { label: "03 / 03 · ссылка для слушателей", title: "Поделитесь одной постоянной ссылкой", text: "По ней фанаты увидят вашу историю, подпишутся и откроют плейлист в Яндекс Музыке. Ссылку всегда можно скопировать в кабинете.", icon: "share" as const }
+  ];
+  const onboardingSlide = onboardingStep === null ? null : onboardingSlides[onboardingStep];
 
   return (
     <>
@@ -328,11 +400,13 @@ function CreatorDashboard({ data, autoConnect }: { data: CreatorDashboardData; a
 
       <section className="creatorGrid lowerCreatorGrid"><article className="creatorPanel playlistPanel"><header><div><span>плейлист в аккаунте followtaste</span><h2>Живой плейлист</h2></div><Icon name="playlist" /></header><div><div><strong>Вкус {profile.name} — живой</strong><p>Последние {data.playlist.maxTracks} уникальных разрешённых треков. Повторы считаются на вашей странице, но не дублируются в плейлисте.</p>{data.playlist.url ? <a href={data.playlist.url} target="_blank" rel="noreferrer">Открыть в Яндекс Музыке <Icon name="arrow" /></a> : <span>Плейлист создастся автоматически после первой записи в истории.</span>}</div></div><footer><span>{data.playlist.trackCount} треков · версия {data.playlist.revision ?? "—"}</span><em>Обновляется автоматически</em></footer></article><article className="creatorPanel consentPanel"><header><div><span>согласие и данные</span><h2>Ваш контроль</h2></div><Icon name="check" /></header><dl><div><dt>Версия согласия</dt><dd>{data.consentVersion || "не подтверждено"}</dd></div><div><dt>Подтверждено</dt><dd>{data.consentAt ? new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", year: "numeric" }).format(new Date(data.consentAt)) : "—"}</dd></div><div><dt>Состояние</dt><dd>{data.connection.status === "connected" ? "активно" : "ожидает подключения"}</dd></div></dl><button type="button" disabled={data.connection.status !== "connected"} onClick={() => setConfirmAction("disconnect")}>Отключить Яндекс Музыку</button><p>Если потребуется удалить профиль и данные, напишите владельцу лично или на camp@navumi.com.</p></article></section>
 
+      {onboardingSlide ? <div className="modalBackdrop onboardingBackdrop"><section className="workspaceModal onboardingModal" role="dialog" aria-modal="true" aria-labelledby="creator-onboarding-title"><button type="button" onClick={() => finishOnboarding(false)} aria-label="Закрыть подсказки"><Icon name="x" /></button><div className="onboardingProgress" aria-label={`Шаг ${onboardingStep! + 1} из ${onboardingSlides.length}`}>{onboardingSlides.map((_, index) => <i className={index <= onboardingStep! ? "active" : ""} key={index} />)}</div><span>{onboardingSlide.label}</span><span className="onboardingIcon"><Icon name={onboardingSlide.icon} size={30} /></span><h2 id="creator-onboarding-title">{onboardingSlide.title}</h2><p>{onboardingSlide.text}</p><div className="onboardingActions"><button type="button" className="onboardingSkip" onClick={() => finishOnboarding(false)}>Пропустить</button>{onboardingStep! > 0 ? <button type="button" className="ghostButton" onClick={() => setOnboardingStep(onboardingStep! - 1)}>Назад</button> : null}{onboardingStep! < onboardingSlides.length - 1 ? <button type="button" className="darkButton" onClick={() => setOnboardingStep(onboardingStep! + 1)}>Дальше <Icon name="arrow" /></button> : <button type="button" className="darkButton" onClick={() => finishOnboarding(true)}>{data.connection.status === "connected" ? "Настроить страницу" : "Подключить музыку"} <Icon name="arrow" /></button>}</div></section></div> : null}
+
       {confirmAction ? <div className="modalBackdrop" role="presentation" onMouseDown={event => { if (event.currentTarget === event.target && !busy) setConfirmAction(null); }}><section className="workspaceModal confirmModal" role="alertdialog" aria-modal="true" aria-labelledby="confirm-action-title"><button type="button" disabled={Boolean(busy)} onClick={() => setConfirmAction(null)} aria-label="Закрыть"><Icon name="x" /></button><span className="confirmModalIcon"><Icon name="shield" size={28} /></span><span>действие требует подтверждения</span><h2 id="confirm-action-title">Отключить историю?</h2><p>Taste перестанет получать новые записи и обновлять плейлист. Уже опубликованные треки останутся видимыми, пока владелец не удалит профиль.</p><div><button type="button" className="ghostButton" disabled={Boolean(busy)} onClick={() => setConfirmAction(null)}>Отмена</button><button type="button" className="dangerButton" disabled={Boolean(busy)} onClick={() => void confirmDestructiveAction()}>{busy ? "Выполняем…" : "Да, отключить"}</button></div></section></div> : null}
 
-      {editOpen ? <div className="modalBackdrop" role="presentation" onMouseDown={event => { if (event.currentTarget === event.target) setEditOpen(false); }}><section className="workspaceModal profileEditModal" role="dialog" aria-modal="true" aria-labelledby="profile-edit-title"><button type="button" onClick={() => setEditOpen(false)} aria-label="Закрыть"><Icon name="x" /></button><span>публичная страница</span><h2 id="profile-edit-title">Редактировать страницу</h2><div className="profilePhotoEditor"><ProfilePortrait compact name={profile.name} avatarUrl={avatarUrl} /><div><strong>Фотография</strong><small>Квадратное изображение будет подготовлено автоматически.</small><label className="ghostButton">{avatarBusy ? "Обрабатываем…" : avatarUrl ? "Заменить фотографию" : "Загрузить фотографию"}<input ref={avatarInput} type="file" accept="image/jpeg,image/png,image/webp" disabled={avatarBusy} onChange={event => { const file = event.target.files?.[0]; if (file) void uploadAvatar(file); }} /></label>{avatarUrl ? <button className="identityRemove" type="button" disabled={avatarBusy} onClick={() => void removeAvatar()}>Удалить фотографию</button> : null}</div></div><label>Имя<input value={profileDraft.name} maxLength={80} onChange={event => setProfileDraft(value => ({ ...value, name: event.target.value }))} /></label><label>Короткая подпись<input value={profileDraft.roleLine} maxLength={120} placeholder="музыкант · режиссёр" onChange={event => setProfileDraft(value => ({ ...value, roleLine: event.target.value }))} /></label><label>О себе<textarea value={profileDraft.bio} maxLength={500} rows={5} placeholder="Пара строк о себе и своём музыкальном вкусе" onChange={event => setProfileDraft(value => ({ ...value, bio: event.target.value }))} /></label><small>{profileDraft.bio.length} / 500</small><div><button type="button" className="ghostButton" onClick={() => setEditOpen(false)}>Отмена</button><button type="button" className="darkButton" disabled={busy === "profile" || profileDraft.name.trim().length < 2 || profileDraft.roleLine.trim().length < 2} onClick={() => void saveProfile()}>{busy === "profile" ? "Сохраняем…" : "Сохранить изменения"}</button></div></section></div> : null}
+      {editOpen ? <div className="modalBackdrop" role="presentation" onMouseDown={event => { if (event.currentTarget === event.target) setEditOpen(false); }}><section className="workspaceModal profileEditModal" role="dialog" aria-modal="true" aria-labelledby="profile-edit-title"><button type="button" onClick={() => setEditOpen(false)} aria-label="Закрыть"><Icon name="x" /></button><span>публичная страница</span><h2 id="profile-edit-title">Редактировать страницу</h2><div className="profilePhotoEditor"><ProfilePortrait compact name={profile.name} avatarUrl={avatarUrl} /><div><strong>Фотография</strong><small>Фото из медиатеки автоматически обрежется до квадрата. Поддерживаются в том числе снимки iPhone.</small><label className="ghostButton">{avatarBusy ? "Готовим фото…" : avatarUrl ? "Заменить фотографию" : "Загрузить фотографию"}<input ref={avatarInput} type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" disabled={avatarBusy} onChange={event => { const file = event.target.files?.[0]; if (file) void uploadAvatar(file); }} /></label>{avatarUrl ? <button className="identityRemove" type="button" disabled={avatarBusy} onClick={() => void removeAvatar()}>Удалить фотографию</button> : null}</div></div><label>Имя<input value={profileDraft.name} maxLength={80} onChange={event => setProfileDraft(value => ({ ...value, name: event.target.value }))} /></label><label>Короткая подпись<input value={profileDraft.roleLine} maxLength={120} placeholder="музыкант · режиссёр" onChange={event => setProfileDraft(value => ({ ...value, roleLine: event.target.value }))} /></label><label>О себе<textarea value={profileDraft.bio} maxLength={500} rows={5} placeholder="Пара строк о себе и своём музыкальном вкусе" onChange={event => setProfileDraft(value => ({ ...value, bio: event.target.value }))} /></label><small>{profileDraft.bio.length} / 500</small><div><button type="button" className="ghostButton" onClick={() => setEditOpen(false)}>Отмена</button><button type="button" className="darkButton" disabled={busy === "profile" || profileDraft.name.trim().length < 2 || profileDraft.roleLine.trim().length < 2} onClick={() => void saveProfile()}>{busy === "profile" ? "Сохраняем…" : "Сохранить изменения"}</button></div></section></div> : null}
 
-      {connectOpen ? <div className="modalBackdrop"><section className="workspaceModal deviceModal"><button type="button" onClick={() => { setConnectOpen(false); setChallenge(null); }} aria-label="Закрыть"><Icon name="x" /></button><span>личный источник истории</span><h2>Подключить вашу Яндекс Музыку</h2>{!challenge ? <><p>Подключите основной аккаунт — тот, где вы действительно слушаете треки. Аккаунт <b>followtaste</b> здесь не нужен: он только публикует итоговые плейлисты.</p><div className="consentChecklist"><span><Icon name="check" />Берём только треки, которые Яндекс уже добавил в историю</span><span><Icon name="check" />По правилам Яндекса туда попадают композиции, дослушанные до конца</span><span><Icon name="check" />Не придумываем точное время, если Яндекс отдаёт только день и порядок</span><span><Icon name="check" />Доступ можно отключить в любой момент</span></div><button className="darkButton wideButton" type="button" disabled={connectionState === "starting"} onClick={() => void startConnection()}>{connectionState === "starting" ? "Получаем код…" : connectionState === "error" ? "Получить новый код" : "Продолжить подключение"}</button></> : <><p>Код уже готов. Нажмите кнопку ниже: Taste скопирует его и откроет Яндекс. Вставьте код, подтвердите доступ и вернитесь в эту вкладку.</p><div className="deviceCode"><small>код подключения</small><strong>{challenge.userCode}</strong><button type="button" onClick={() => void navigator.clipboard.writeText(challenge.userCode)}><Icon name="copy" />Копировать</button></div><a className="darkButton wideButton" href={challenge.verificationUrl} target="_blank" rel="noreferrer" onClick={() => void navigator.clipboard.writeText(challenge.userCode).catch(() => undefined)}>Скопировать код и открыть Яндекс <Icon name="arrow" /></a><div className="waitingState"><i /><span>Ждём подтверждения. После возврата кабинет обновится автоматически.</span></div><button type="button" className="connectionCheckButton" onClick={() => void checkConnection(challenge)}>Я подтвердил доступ — проверить</button></>}</section></div> : null}
+      {connectOpen ? <div className="modalBackdrop"><section className="workspaceModal deviceModal" role="dialog" aria-modal="true" aria-labelledby="music-connect-title"><button type="button" onClick={() => { setConnectOpen(false); setChallenge(null); setCodeCopied(false); }} aria-label="Закрыть"><Icon name="x" /></button><span>личный источник истории</span><h2 id="music-connect-title">Подключить вашу Яндекс Музыку</h2>{!challenge ? <><p>Подключите основной аккаунт — тот, где вы действительно слушаете треки. Аккаунт <b>followtaste</b> здесь не нужен: он только публикует итоговые плейлисты.</p><div className="consentChecklist"><span><Icon name="check" />Берём только треки, которые Яндекс уже добавил в историю</span><span><Icon name="check" />По правилам Яндекса туда попадают композиции, дослушанные до конца</span><span><Icon name="check" />Не придумываем точное время, если Яндекс отдаёт только день и порядок</span><span><Icon name="check" />Доступ можно отключить в любой момент</span></div><button className="darkButton wideButton" type="button" disabled={connectionState === "starting"} onClick={() => void startConnection()}>{connectionState === "starting" ? "Получаем код…" : connectionState === "error" ? "Получить новый код" : "Продолжить подключение"}</button></> : <><p>Сначала скопируйте код, затем откройте Яндекс. Такой порядок одинаково работает в Safari, Chrome и мобильных браузерах.</p><div className={`deviceCode ${codeCopied ? "isCopied" : ""}`}><label htmlFor="music-device-code">код подключения</label><input ref={connectionCodeInput} id="music-device-code" readOnly value={challenge.userCode} inputMode="none" onFocus={event => event.currentTarget.select()} /><button type="button" onClick={() => void copyConnectionCode()}><Icon name={codeCopied ? "check" : "copy"} />{codeCopied ? "Скопирован" : "Копировать"}</button></div><div className="deviceConnectionActions"><button className="darkButton wideButton" type="button" onClick={() => void copyConnectionCode()}><Icon name={codeCopied ? "check" : "copy"} />{codeCopied ? "Код скопирован" : "Скопировать код"}</button><a className="connectionExternalLink" href={challenge.verificationUrl} target="_blank" rel="noreferrer" onClick={() => { if (!codeCopied) void copyConnectionCode(); }}>Открыть Яндекс <Icon name="arrow" /></a></div><small className="mobileConnectionHint">На телефоне вставьте код в открывшееся поле Яндекса, подтвердите доступ и вернитесь в эту вкладку Taste.</small><div className="waitingState"><i /><span>После возврата кабинет сам проверит подключение.</span></div><button type="button" className="connectionCheckButton" onClick={() => void checkConnection(challenge)}>Я подтвердил доступ — проверить</button></>}</section></div> : null}
     </>
   );
 }

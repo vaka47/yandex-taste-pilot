@@ -34,6 +34,8 @@ export type AdminTastemakerRow = {
   playlistUrl: string | null;
   playlistStatus: "healthy" | "paused" | "error" | "not_created";
   connectionStatus: "connected" | "pending" | "error" | "disconnected" | "not_connected";
+  playlistError: string | null;
+  connectionError: string | null;
 };
 
 export type AdminDashboardData = {
@@ -91,6 +93,7 @@ export type CreatorDashboardData = {
   };
   consentVersion: string | null;
   consentAt: string | null;
+  onboardingSeenAt: string | null;
   hiddenArtistCount: number;
   blockedArtists: Array<{ id: string; name: string }>;
   events: ListeningEvent[];
@@ -180,7 +183,8 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
           ) returning_visitors
         ) as return_visitors_7d,
         s.last_sync_at,
-        mc.status as connection_status, p.public_url, p.last_error as playlist_error
+        mc.status as connection_status, mc.last_error_code as connection_error,
+        p.public_url, p.last_error as playlist_error
       from tastemakers t
       left join music_connections mc on mc.tastemaker_id = t.id
       left join playlists p on p.tastemaker_id = t.id
@@ -345,7 +349,9 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
         followerD7Retention: Number(followerRetention?.follower_d7_retention || 0),
         lastSyncAt: iso(row.last_sync_at), playlistUrl: row.public_url ? String(row.public_url) : null,
         playlistStatus: row.status === "paused" ? "paused" : row.playlist_error ? "error" : row.public_url ? "healthy" : "not_created",
-        connectionStatus: row.connection_status || "not_connected"
+        connectionStatus: row.connection_status || "not_connected",
+        playlistError: row.playlist_error ? String(row.playlist_error) : null,
+        connectionError: row.connection_error ? String(row.connection_error) : null
       };
     }),
     metrics: analyticsFromRow(analytics[0], globalRetentionRows[0]),
@@ -433,7 +439,7 @@ export async function getCreatorDashboardData(userId: string, role: Role): Promi
       maxTracks: Number(maker.max_tracks || 50), revision: maker.revision === null || maker.revision === undefined ? null : Number(maker.revision),
       lastSyncAt: iso(maker.playlist_last_sync_at)
     },
-    consentVersion: maker.consent_version ? String(maker.consent_version) : null, consentAt: iso(maker.consent_at),
+    consentVersion: maker.consent_version ? String(maker.consent_version) : null, consentAt: iso(maker.consent_at), onboardingSeenAt: iso(maker.creator_onboarding_seen_at),
     hiddenArtistCount: Number(maker.hidden_artist_count || 0),
     blockedArtists: blockedArtists.map(row => {
       const normalized = String(row.artist_name_normalized);
