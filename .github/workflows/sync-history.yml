@@ -5,6 +5,11 @@ on:
     # Offset from the start of the hour, when GitHub Actions is under the highest load.
     - cron: "2-57/5 * * * *"
   workflow_dispatch:
+    inputs:
+      tastemakerId:
+        description: "Optional UUID for targeted playlist recovery"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -22,7 +27,17 @@ jobs:
         env:
           APP_URL: ${{ secrets.APP_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
-        run: >-
-          curl --fail-with-body --silent --show-error --retry 2 --max-time 180
-          -H "Authorization: Bearer ${CRON_SECRET}"
-          "${APP_URL}/api/cron/sync?source=github_schedule"
+          TASTEMAKER_ID: ${{ inputs.tastemakerId }}
+        run: |
+          if [[ -n "${TASTEMAKER_ID}" ]]; then
+            if [[ ! "${TASTEMAKER_ID}" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+              echo "Invalid tastemaker UUID"
+              exit 1
+            fi
+            TARGET_URL="${APP_URL}/api/cron/playlist?tastemakerId=${TASTEMAKER_ID}"
+          else
+            TARGET_URL="${APP_URL}/api/cron/sync?source=github_schedule"
+          fi
+          curl --fail-with-body --silent --show-error --retry 2 --max-time 180 \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${TARGET_URL}"
