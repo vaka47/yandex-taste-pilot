@@ -869,7 +869,7 @@ summary:active {
 .heroTelegramAction svg:last-child { position: absolute; right: 18px; margin-left: 0; }
 
 .profileHeadline { letter-spacing: -.045em !important; }
-.profileHeadlineLead { display: block; letter-spacing: .015em; }
+.heroCopy h1 .profileHeadlineLead { display: block; color: var(--ink); letter-spacing: .015em; }
 
 .repeatGrid { grid-auto-columns: minmax(190px,21.5%); gap: 18px; }
 .repeatItem { padding-top: 10px; }
