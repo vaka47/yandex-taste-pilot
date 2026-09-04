@@ -11,6 +11,20 @@ declare global {
 
 export { isDatabaseConfigured };
 
+function databaseSsl(connectionString: string) {
+  const explicit = process.env.DATABASE_SSL?.trim().toLowerCase();
+  if (explicit === "false" || explicit === "0" || explicit === "disable") return false;
+  if (explicit === "true" || explicit === "1" || explicit === "require") return "require" as const;
+  try {
+    const url = new URL(connectionString);
+    if (url.searchParams.get("sslmode") === "disable") return false;
+    if (["localhost", "127.0.0.1", "db"].includes(url.hostname)) return false;
+  } catch {
+    // Preserve the secure production default for an unparseable remote URL.
+  }
+  return "require" as const;
+}
+
 export function db() {
   const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
   if (!connectionString) throw new Error("DATABASE_URL is not configured");
@@ -20,7 +34,7 @@ export function db() {
       idle_timeout: 20,
       connect_timeout: 15,
       prepare: false,
-      ssl: connectionString.includes("localhost") || connectionString.includes("127.0.0.1") ? false : "require",
+      ssl: databaseSsl(connectionString),
       transform: { undefined: null }
     });
   }

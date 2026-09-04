@@ -1,0 +1,15 @@
+.git
+.github
+.next
+.vercel
+.env
+.env.*
+!.env.example
+node_modules
+music-connector/.venv
+music-connector/__pycache__
+**/__pycache__
+*.pyc
+npm-debug.log*
+deploy/backups
+

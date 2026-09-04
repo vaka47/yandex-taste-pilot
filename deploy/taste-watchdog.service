@@ -1,0 +1,13 @@
+[Unit]
+Description=Recover unhealthy Taste containers
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=tasteops
+Group=tasteops
+WorkingDirectory=/opt/taste
+ExecStart=/usr/bin/flock -n /var/lock/taste-watchdog.lock /opt/taste/deploy/watchdog.sh
+Nice=10
+
