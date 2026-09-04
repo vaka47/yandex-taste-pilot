@@ -35,10 +35,13 @@ ufw allow 443/tcp
 ufw allow 443/udp
 ufw --force enable
 
-install -m 0644 /opt/taste/deploy/taste-update.service /etc/systemd/system/taste-update.service
-install -m 0644 /opt/taste/deploy/taste-update.timer /etc/systemd/system/taste-update.timer
-install -m 0644 /opt/taste/deploy/taste-watchdog.service /etc/systemd/system/taste-watchdog.service
-install -m 0644 /opt/taste/deploy/taste-watchdog.timer /etc/systemd/system/taste-watchdog.timer
-systemctl daemon-reload
-systemctl enable --now taste-update.timer taste-watchdog.timer
-
+if [ -f /opt/taste/deploy/taste-update.service ] && [ -f /opt/taste/deploy/taste-watchdog.service ]; then
+  install -m 0644 /opt/taste/deploy/taste-update.service /etc/systemd/system/taste-update.service
+  install -m 0644 /opt/taste/deploy/taste-update.timer /etc/systemd/system/taste-update.timer
+  install -m 0644 /opt/taste/deploy/taste-watchdog.service /etc/systemd/system/taste-watchdog.service
+  install -m 0644 /opt/taste/deploy/taste-watchdog.timer /etc/systemd/system/taste-watchdog.timer
+  systemctl daemon-reload
+  systemctl enable --now taste-update.timer taste-watchdog.timer
+else
+  echo "Application files are not present yet; systemd timers will be installed after the repository is cloned."
+fi
