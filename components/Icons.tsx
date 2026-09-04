@@ -1,12 +1,13 @@
 import type { SVGProps } from "react";
 
-type IconName = "arrow" | "check" | "clock" | "comment" | "copy" | "eye" | "eyeOff" | "heart" | "home" | "lock" | "music" | "pause" | "play" | "playlist" | "pulse" | "search" | "send" | "settings" | "share" | "shield" | "spark" | "sync" | "user" | "userOff" | "users" | "x";
+type IconName = "arrow" | "check" | "chevron" | "clock" | "comment" | "copy" | "eye" | "eyeOff" | "heart" | "home" | "lock" | "music" | "pause" | "play" | "playlist" | "pulse" | "search" | "send" | "settings" | "share" | "shield" | "spark" | "sync" | "user" | "userOff" | "users" | "x";
 
 export function Icon({ name, size = 20, ...props }: SVGProps<SVGSVGElement> & { name: IconName; size?: number }) {
   const common = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
   const paths: Record<IconName, React.ReactNode> = {
     arrow: <><path d="M5 12h14"/><path d="m14 7 5 5-5 5"/></>,
     check: <path d="m5 12 4 4L19 6"/>,
+    chevron: <path d="m8 4 8 8-8 8"/>,
     clock: <><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>,
     comment: <><path d="M21 11.5a8.4 8.4 0 0 1-9 8.5 9.7 9.7 0 0 1-4.1-.9L3 21l1.5-4.3A8.6 8.6 0 0 1 3 11.5 8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5Z"/><path d="M8 10.5h8M8 14h5"/></>,
     copy: <><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></>,

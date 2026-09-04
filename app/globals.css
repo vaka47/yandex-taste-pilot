@@ -1075,42 +1075,59 @@ summary:active {
   border: 0;
   background: transparent;
   box-shadow: none;
-  color: var(--ink);
-  display: block;
+  color: var(--white);
+  display: grid;
+  gap: 3px;
   text-align: center;
-  line-height: 1.35;
+  line-height: 1.25;
+  text-shadow: 0 2px 8px rgba(78,22,7,.42);
   pointer-events: auto;
   backdrop-filter: none;
 }
-.landingMakerIntro strong { font-size: 14px; line-height: inherit; }
-.landingMakerIntro span { color: rgba(17,17,15,.72); font-size: 13px; line-height: inherit; }
-.landingMakerIntro:hover strong { text-decoration: underline; text-underline-offset: 4px; }
+.landingMakerIntro strong {
+  display: block;
+  color: var(--white);
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: .075em;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+.landingMakerIntro span {
+  display: block;
+  color: var(--white);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+.landingMakerIntro:hover strong { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; }
 .landingSlide { overflow: visible; }
 .landingSlidePortrait { box-shadow: 8px 8px 0 rgba(17,17,15,.16); }
 .landingCarouselArrow {
   position: absolute;
   z-index: 12;
   top: 50%;
-  width: 46px;
-  height: 46px;
+  width: 56px;
+  height: 56px;
   padding: 0;
-  border: 1px solid var(--ink);
+  border: 0;
   border-radius: 50%;
-  background: rgba(255,254,249,.94);
-  color: var(--ink);
+  background: transparent;
+  color: var(--white);
   display: grid;
   place-items: center;
-  box-shadow: 3px 3px 0 rgba(17,17,15,.82);
+  box-shadow: none;
   cursor: pointer;
   transform: translateY(-50%);
-  transition: background var(--motion-fast) ease, color var(--motion-fast) ease, transform var(--motion-fast) ease, box-shadow var(--motion-fast) ease;
+  transition: color var(--motion-fast) ease, transform var(--motion-fast) ease;
 }
 .landingCarouselArrow.previous { left: max(10px,calc((100cqw - var(--portrait-size)) / 2 - 58px)); }
 .landingCarouselArrow.next { right: max(10px,calc((100cqw - var(--portrait-size)) / 2 - 58px)); }
 .landingCarouselArrow.previous svg { transform: rotate(180deg); }
-.landingCarouselArrow:hover { background: var(--ink); color: var(--white); }
-.landingCarouselArrow:focus-visible { outline: 3px solid var(--sun); outline-offset: 3px; }
-.landingCarouselArrow:active { box-shadow: 1px 1px 0 rgba(17,17,15,.82); transform: translateY(-50%) scale(.92) !important; }
+.landingCarouselArrow svg { filter: drop-shadow(0 2px 0 rgba(17,17,15,.28)); }
+.landingCarouselArrow:hover { background: transparent; color: var(--sun); transform: translateY(-50%) scale(1.1); }
+.landingCarouselArrow:focus-visible { outline: 2px solid var(--white); outline-offset: -4px; }
+.landingCarouselArrow:active { box-shadow: none; transform: translateY(-50%) scale(.88) !important; }
 .landingCarouselDots {
   position: absolute;
   z-index: 12;
@@ -1154,9 +1171,11 @@ summary:active {
     padding: 0;
     text-align: center;
   }
-  .landingMakerIntro strong, .landingMakerIntro span { font-size: 10px; line-height: 1.35; }
+  .landingMakerIntro strong { font-size: 13px; line-height: 1.15; }
+  .landingMakerIntro span { font-size: 12px; line-height: 1.25; }
   .landingSlidePortrait { box-shadow: 5px 5px 0 rgba(17,17,15,.16); }
-  .landingCarouselArrow { width: 40px; height: 40px; box-shadow: 2px 2px 0 rgba(17,17,15,.78); }
+  .landingCarouselArrow { width: 48px; height: 48px; box-shadow: none; }
+  .landingCarouselArrow svg { width: 30px; height: 30px; }
   .landingCarouselArrow.previous { left: 8px; }
   .landingCarouselArrow.next { right: 8px; }
   .landingCarouselDots { bottom: max(7px,calc((100cqh - var(--portrait-size)) / 2 - 29px)); min-height: 20px; padding: 6px 8px; }
