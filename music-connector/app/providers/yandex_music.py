@@ -111,7 +111,7 @@ class YandexMusicProvider(MusicHistoryProvider):
                     album_id = _model_value(item_id, "album_id")
                     model = _model_value(data, "full_model")
                     entries.append((day, position, model, (track_id, album_id)))
-                    if model is None and track_id is not None:
+                    if track_id is not None and (model is None or _cover_url(model) is None):
                         missing_refs.append(f"{track_id}:{album_id}" if album_id is not None else str(track_id))
                     position += 1
 
@@ -128,7 +128,8 @@ class YandexMusicProvider(MusicHistoryProvider):
         normalized: list[dict[str, Any]] = []
         for day, item_position, model, ids in entries:
             track_id, _ = ids
-            track = model or resolved.get(str(track_id))
+            resolved_track = resolved.get(str(track_id))
+            track = resolved_track if resolved_track is not None and (model is None or _cover_url(model) is None) else model
             item = _normalize_track(track, day, item_position, occurrence_ranks[item_position])
             if item:
                 normalized.append(item)

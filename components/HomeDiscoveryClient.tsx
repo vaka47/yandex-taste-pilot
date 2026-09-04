@@ -19,7 +19,17 @@ export function HomeDiscoveryClient({ profiles, activity }: { profiles: HomeTast
     if (paused || profiles.length < 2) return;
     const timer = window.setInterval(() => setActive(value => (value + 1) % profiles.length), 5200);
     return () => window.clearInterval(timer);
-  }, [paused, profiles.length]);
+  }, [active, paused, profiles.length]);
+
+  useEffect(() => {
+    for (const profile of profiles) {
+      for (const source of [profile.avatarUrl, profile.latestTrack?.coverUrl]) {
+        if (!source) continue;
+        const image = new Image();
+        image.src = source;
+      }
+    }
+  }, [profiles]);
 
   function shift(direction: number) {
     if (!profiles.length) return;
@@ -42,13 +52,12 @@ export function HomeDiscoveryClient({ profiles, activity }: { profiles: HomeTast
           <p><span className="landingDescriptionLine">Живая музыкальная история людей,</span>{" "}<span className="landingDescriptionLine">чьему вкусу вы доверяете</span></p>
           <div className="landingHeroActions"><a className="landingPrimary" href="#discover"><Icon name="search" />Найти Саундмейкера</a><Link className="landingSecondary" href="/about">Как это устроено <Icon name="arrow" /></Link></div>
         </div>
-        <div className="landingVisual" onPointerEnter={() => setPaused(true)} onPointerLeave={() => setPaused(false)} onPointerDown={event => { pointerStart.current = event.clientX; }} onPointerUp={event => endSwipe(event.clientX)}>
-          {current ? <Link className="landingSlide" href={`/t/${current.slug}`} aria-label={`Открыть профиль ${current.name}`}>
+        <div className="landingVisual" onPointerEnter={() => setPaused(true)} onPointerLeave={() => setPaused(false)} onFocusCapture={() => setPaused(true)} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setPaused(false); }} onPointerDown={event => { pointerStart.current = event.clientX; }} onPointerUp={event => endSwipe(event.clientX)} onPointerCancel={() => { pointerStart.current = null; }}>
+          {current ? <><Link className="landingMakerIntro" href={`/t/${current.slug}`}><strong>{current.name}</strong>{current.roleLine ? <span> — {current.roleLine}</span> : null}</Link><Link key={`${current.id}:${current.latestTrack?.id || "empty"}`} className="landingSlide" href={`/t/${current.slug}`} aria-label={`Открыть профиль ${current.name}`}>
             <div className="landingSlidePortrait">{current.avatarUrl ? <img src={current.avatarUrl} alt={current.name} draggable={false} /> : <span>{current.name.split(" ").map(word => word[0]).join("").slice(0, 2)}</span>}</div>
-            <div className="landingMakerIntro"><strong>{current.name}</strong><span>— {current.roleLine}</span></div>
             <div className="landingSignalCard"><small>{current.updatedAt ? `обновлено ${relativeTime(current.updatedAt)}` : "история подключена"}</small><strong>{current.name}</strong><span>{current.latestTrack ? `${current.latestTrack.title} · ${current.latestTrack.artists.join(", ")}` : current.roleLine}</span><span className="landingSignalCover">{current.latestTrack?.coverUrl ? <img src={current.latestTrack.coverUrl} alt="" /> : <Icon name="music" />}</span></div>
-          </Link> : <div className="landingSlide landingSlideEmpty"><div className="landingSlidePortrait"><Icon name="music" size={52} /></div><div className="landingSignalCard"><strong>Taste</strong><span>Скоро здесь появятся первые Саундмейкеры</span></div></div>}
-          {profiles.length > 1 ? <div className="landingCarouselControls"><button type="button" onClick={() => shift(-1)} aria-label="Предыдущий Саундмейкер"><Icon name="arrow" /></button><span>{profiles.map((profile, index) => <button key={profile.id} className={index === active ? "active" : ""} type="button" onClick={() => setActive(index)} aria-label={`Показать ${profile.name}`} />)}</span><button type="button" onClick={() => shift(1)} aria-label="Следующий Саундмейкер"><Icon name="arrow" /></button></div> : null}
+          </Link></> : <div className="landingSlide landingSlideEmpty"><div className="landingSlidePortrait"><Icon name="music" size={52} /></div><div className="landingSignalCard"><strong>Taste</strong><span>Скоро здесь появятся первые Саундмейкеры</span></div></div>}
+          {profiles.length > 1 ? <><button className="landingCarouselArrow previous" type="button" onClick={() => shift(-1)} aria-label="Предыдущий Саундмейкер"><Icon name="arrow" /></button><button className="landingCarouselArrow next" type="button" onClick={() => shift(1)} aria-label="Следующий Саундмейкер"><Icon name="arrow" /></button><div className="landingCarouselDots" aria-label={`Слайд ${active + 1} из ${profiles.length}`}>{profiles.map((profile, index) => <button key={profile.id} className={index === active ? "active" : ""} type="button" onClick={() => setActive(index)} aria-label={`Показать ${profile.name}`} aria-current={index === active ? "true" : undefined} />)}</div></> : null}
         </div>
       </section>
 

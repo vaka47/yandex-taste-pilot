@@ -228,7 +228,7 @@ export function ProfileClient({ initialProfile, session }: { initialProfile: Tas
     <>
       <main className="profilePage">
         <section className="profileHero">
-          <div className="portraitStage">
+          <div className={`portraitStage ${profile.avatarUrl ? "hasPortraitImage" : ""}`}>
             <ProfilePortrait name={profile.name} avatarUrl={profile.avatarUrl} />
             {profile.events[0] ? <a className="nowTape" href={`/go/track/${profile.events[0].id}?source=hero_tape&position=1`} target="_blank" rel="noreferrer" aria-label={`Открыть ${profile.events[0].track.title} в Яндекс Музыке`}>
               <span className="liveDot" />
