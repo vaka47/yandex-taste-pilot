@@ -1157,27 +1157,40 @@ summary:active {
 .portraitStage.hasPortraitImage::after { display: none; }
 
 @media (max-width: 980px) {
-  .landingVisual { --portrait-size: min(calc(100cqw - 104px), calc(100cqh - 138px)); }
-  .landingCarouselArrow.previous { left: max(8px,calc((100cqw - var(--portrait-size)) / 2 - 50px)); }
-  .landingCarouselArrow.next { right: max(8px,calc((100cqw - var(--portrait-size)) / 2 - 50px)); }
+  .landingVisual { --portrait-size: min(calc(100cqw - 128px), calc(100cqh - 166px)); }
+  .landingCarouselArrow.previous { left: max(4px,calc((100cqw - var(--portrait-size)) / 2 - 62px)); }
+  .landingCarouselArrow.next { right: max(4px,calc((100cqw - var(--portrait-size)) / 2 - 62px)); }
 }
 
 @media (max-width: 640px) {
-  .landingVisual { --portrait-size: min(calc(100cqw - 80px), calc(100cqh - 132px)); }
+  .landingVisual { --portrait-size: min(calc(100cqw - 116px), calc(100cqh - 170px)); }
   .landingMakerIntro {
-    top: max(13px,calc((100cqh - var(--portrait-size)) / 2 - 42px));
-    left: 18px;
-    width: calc(100cqw - 36px);
+    top: max(16px,calc((100cqh - var(--portrait-size)) / 2 - 74px));
+    left: calc((100cqw - var(--portrait-size)) / 2);
+    width: var(--portrait-size);
     padding: 0;
+    gap: 4px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
     text-align: center;
   }
-  .landingMakerIntro strong { font-size: 13px; line-height: 1.15; }
-  .landingMakerIntro span { font-size: 12px; line-height: 1.25; }
+  .landingMakerIntro strong {
+    font-size: 16px;
+    font-weight: 650;
+    letter-spacing: -.015em;
+    line-height: 1.2;
+    text-transform: none;
+  }
+  .landingMakerIntro span {
+    font-size: 13px;
+    font-weight: 400;
+    letter-spacing: 0;
+    line-height: 1.3;
+  }
   .landingSlidePortrait { box-shadow: 5px 5px 0 rgba(17,17,15,.16); }
   .landingCarouselArrow { width: 48px; height: 48px; box-shadow: none; }
   .landingCarouselArrow svg { width: 30px; height: 30px; }
-  .landingCarouselArrow.previous { left: 8px; }
-  .landingCarouselArrow.next { right: 8px; }
+  .landingCarouselArrow.previous { left: 4px; }
+  .landingCarouselArrow.next { right: 4px; }
   .landingCarouselDots { bottom: max(7px,calc((100cqh - var(--portrait-size)) / 2 - 29px)); min-height: 20px; padding: 6px 8px; }
   .landingCarouselDots button { width: 14px; height: 3px; }
   .landingCarouselDots button.active { width: 24px; }
