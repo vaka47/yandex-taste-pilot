@@ -1067,7 +1067,8 @@ summary:active {
 .landingMakerIntro {
   position: absolute;
   z-index: 10;
-  top: max(16px,calc((100cqh - var(--portrait-size)) / 2 - 44px));
+  top: auto;
+  bottom: calc((100cqh + var(--portrait-size)) / 2 + 16px);
   left: calc((100cqw - var(--portrait-size)) / 2);
   width: var(--portrait-size);
   min-height: 0;
@@ -1080,7 +1081,7 @@ summary:active {
   gap: 3px;
   text-align: center;
   line-height: 1.25;
-  text-shadow: 0 2px 8px rgba(78,22,7,.42);
+  text-shadow: none;
   pointer-events: auto;
   backdrop-filter: none;
 }
@@ -1088,10 +1089,10 @@ summary:active {
   display: block;
   color: var(--white);
   font-size: 18px;
-  font-weight: 900;
-  letter-spacing: .075em;
-  line-height: 1.15;
-  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.2;
+  text-transform: none;
 }
 .landingMakerIntro span {
   display: block;
@@ -1157,26 +1158,27 @@ summary:active {
 .portraitStage.hasPortraitImage::after { display: none; }
 
 @media (max-width: 980px) {
-  .landingVisual { --portrait-size: min(calc(100cqw - 128px), calc(100cqh - 166px)); }
+  .landingVisual { --portrait-size: min(calc(100cqw - 112px), calc(100cqh - 150px)); }
   .landingCarouselArrow.previous { left: max(4px,calc((100cqw - var(--portrait-size)) / 2 - 62px)); }
   .landingCarouselArrow.next { right: max(4px,calc((100cqw - var(--portrait-size)) / 2 - 62px)); }
 }
 
 @media (max-width: 640px) {
-  .landingVisual { --portrait-size: min(calc(100cqw - 116px), calc(100cqh - 170px)); }
+  .landingVisual { --portrait-size: min(calc(100cqw - 104px), calc(100cqh - 150px)); }
   .landingMakerIntro {
-    top: max(16px,calc((100cqh - var(--portrait-size)) / 2 - 74px));
+    top: auto;
+    bottom: calc((100cqh + var(--portrait-size)) / 2 + 16px);
     left: calc((100cqw - var(--portrait-size)) / 2);
     width: var(--portrait-size);
     padding: 0;
     gap: 4px;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+    font-family: var(--font);
     text-align: center;
   }
   .landingMakerIntro strong {
-    font-size: 16px;
-    font-weight: 650;
-    letter-spacing: -.015em;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0;
     line-height: 1.2;
     text-transform: none;
   }
@@ -1189,8 +1191,8 @@ summary:active {
   .landingSlidePortrait { box-shadow: 5px 5px 0 rgba(17,17,15,.16); }
   .landingCarouselArrow { width: 48px; height: 48px; box-shadow: none; }
   .landingCarouselArrow svg { width: 30px; height: 30px; }
-  .landingCarouselArrow.previous { left: 4px; }
-  .landingCarouselArrow.next { right: 4px; }
+  .landingCarouselArrow.previous { left: 0; }
+  .landingCarouselArrow.next { right: 0; }
   .landingCarouselDots { bottom: max(7px,calc((100cqh - var(--portrait-size)) / 2 - 29px)); min-height: 20px; padding: 6px 8px; }
   .landingCarouselDots button { width: 14px; height: 3px; }
   .landingCarouselDots button.active { width: 24px; }
