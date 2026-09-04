@@ -11,7 +11,6 @@ if [ "$current_revision" = "$remote_revision" ]; then
 fi
 
 git merge --ff-only origin/main
-docker compose build --pull
-docker compose up -d --remove-orphans --wait
+docker compose --env-file .env.production build --pull
+docker compose --env-file .env.production up -d --remove-orphans --wait
 docker image prune -f --filter "until=168h"
-

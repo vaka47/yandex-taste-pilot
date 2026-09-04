@@ -6,7 +6,7 @@ x-logging: &default-logging
 
 services:
   db:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DATABASE:-taste}
@@ -110,7 +110,7 @@ services:
     logging: *default-logging
 
   backup:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     restart: unless-stopped
     init: true
     environment:
@@ -162,4 +162,3 @@ volumes:
   database-backups:
   caddy-data:
   caddy-config:
-
