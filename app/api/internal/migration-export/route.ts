@@ -24,10 +24,20 @@ export async function POST(request: NextRequest) {
   try {
     const publicKey = createPublicKey(body.publicKey);
     if (publicKey.asymmetricKeyType !== "rsa") throw new Error("RSA_REQUIRED");
-    const value = process.env.TOKEN_ENCRYPTION_KEY;
-    if (!value) return NextResponse.json({ error: "KEY_NOT_CONFIGURED" }, { status: 503 });
-    const encrypted = publicEncrypt({ key: publicKey, padding: constants.RSA_PKCS1_OAEP_PADDING, oaepHash: "sha256" }, Buffer.from(value));
-    const values = { TOKEN_ENCRYPTION_KEY: encrypted.toString("base64") };
+    const source = {
+      TOKEN_ENCRYPTION_KEY: process.env.TOKEN_ENCRYPTION_KEY,
+      YANDEX_ID_CLIENT_SECRET: process.env.YANDEX_ID_CLIENT_SECRET
+    };
+    if (Object.values(source).some(value => !value)) {
+      return NextResponse.json({ error: "KEY_NOT_CONFIGURED" }, { status: 503 });
+    }
+    const values = Object.fromEntries(Object.entries(source).map(([name, value]) => {
+      const encrypted = publicEncrypt(
+        { key: publicKey, padding: constants.RSA_PKCS1_OAEP_PADDING, oaepHash: "sha256" },
+        Buffer.from(value || "")
+      );
+      return [name, encrypted.toString("base64")];
+    }));
     return NextResponse.json({ version: 1, values }, {
       headers: { "cache-control": "no-store, private", pragma: "no-cache" }
     });
