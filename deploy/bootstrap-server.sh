@@ -24,8 +24,8 @@ vm.vfs_cache_pressure=50
 EOF
 sysctl --system >/dev/null
 
-install -d -o tasteops -g tasteops -m 0750 /opt/taste
-usermod -aG docker tasteops
+install -d -o followtaste -g followtaste -m 0750 /opt/taste
+usermod -aG docker followtaste
 
 ufw default deny incoming
 ufw default allow outgoing

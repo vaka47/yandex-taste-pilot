@@ -5,10 +5,9 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=tasteops
-Group=tasteops
+User=followtaste
+Group=followtaste
 WorkingDirectory=/opt/taste
 ExecStart=/usr/bin/flock -n /var/lock/taste-deploy.lock /opt/taste/deploy/update.sh
 Nice=10
 IOSchedulingClass=idle
-
