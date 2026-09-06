@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: "standalone",
+  output: process.env.VERCEL === "1" ? undefined : "standalone",
   poweredByHeader: false,
   reactStrictMode: true,
   experimental: {
