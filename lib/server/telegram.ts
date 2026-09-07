@@ -1,4 +1,5 @@
 import "server-only";
+import { createHmac } from "node:crypto";
 import { appUrl, telegramNotificationsConfigured } from "@/lib/server/config";
 import { hashToken, randomToken } from "@/lib/server/crypto";
 import { db, ensureSchema } from "@/lib/server/db";
@@ -21,15 +22,14 @@ async function telegramRequest<T>(method: string, payload: Record<string, unknow
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) throw new Error("TELEGRAM_NOT_CONFIGURED");
   const relayUrl = process.env.TELEGRAM_API_RELAY_URL?.trim();
-  const relaySecret = process.env.TELEGRAM_RELAY_SECRET || process.env.TELEGRAM_WEBHOOK_SECRET || process.env.CRON_SECRET;
-  if (relayUrl && !relaySecret) throw new Error("TELEGRAM_RELAY_NOT_CONFIGURED");
+  const body = JSON.stringify(relayUrl ? { method, payload } : payload);
   const response = await fetch(relayUrl || `https://api.telegram.org/bot${token}/${method}`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      ...(relayUrl ? { authorization: `Bearer ${relaySecret}` } : {})
+      ...(relayUrl ? { "x-taste-relay-signature": createHmac("sha256", token).update(body).digest("hex") } : {})
     },
-    body: JSON.stringify(relayUrl ? { method, payload } : payload),
+    body,
     cache: "no-store",
     signal: AbortSignal.timeout(15_000)
   });
