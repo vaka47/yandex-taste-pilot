@@ -38,11 +38,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, description: "INVALID_REQUEST" }, { status: 400 });
   }
 
+  const upstreamPayload = method === "setWebhook"
+    ? { ...payload, secret_token: process.env.TELEGRAM_WEBHOOK_SECRET }
+    : payload;
+  if (method === "setWebhook" && !process.env.TELEGRAM_WEBHOOK_SECRET) {
+    return NextResponse.json({ ok: false, description: "WEBHOOK_SECRET_NOT_CONFIGURED" }, { status: 503 });
+  }
+
   try {
     const upstream = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(upstreamPayload),
       cache: "no-store",
       signal: AbortSignal.timeout(15_000)
     });
