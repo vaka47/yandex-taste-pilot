@@ -1,9 +1,6 @@
 name: Sync Yandex Music history
 
 on:
-  schedule:
-    # Offset from the start of the hour, when GitHub Actions is under the highest load.
-    - cron: "2-57/5 * * * *"
   workflow_dispatch:
     inputs:
       tastemakerId:

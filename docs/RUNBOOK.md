@@ -18,15 +18,15 @@ Rebuild only the existing playlist object. Desired state is the latest 50 unique
 ## Automation recovery
 
 1. Check **Админка → Автоматическая публикация** for the last source, status and age.
-2. Confirm that Google Cloud Scheduler job `taste-yandex-history-sync` is enabled and its latest HTTP result is 200. It is the primary one-minute trigger.
-3. Run the protected cron route manually or dispatch `sync-watchdog.yml`; every run is persisted in `automation_runs`.
+2. Confirm that the `scheduler` Compose service is healthy. It is the primary one-minute trigger on the production VM.
+3. Confirm that `taste-watchdog.timer` and `taste-update.timer` are active. Run the protected cron route manually if an immediate recovery cycle is needed; every run is persisted in `automation_runs`.
 4. A `partial` run means at least one creator sync or Telegram send failed. Successful creators are not rolled back and failed work is retryable.
 5. A public or creator page never waits for Yandex: it serves stored data first, then schedules a best-effort sync after the response.
-6. Rotate `CRON_SECRET` atomically in Vercel, GitHub Actions and Cloud Scheduler. A mismatched scheduler header returns 401 by design.
+6. Rotate `CRON_SECRET` atomically in `.env.production` and any intentionally retained manual GitHub workflow secret. A mismatched scheduler header returns 401 by design.
 
 ## Telegram notifications
 
-1. Set the four Telegram environment variables, redeploy, then call **Обновить Telegram-вебхук** from the owner admin.
+1. Set the Telegram environment variables, deploy both the VM and Vercel bridge, then configure Telegram to call the Vercel webhook. The bridge must forward an HMAC-signed body to the VM; `getWebhookInfo` must report zero pending updates and no last error.
 2. Test with a real fan flow: Yandex ID login → explicit follow → Telegram button → `Start` in the private bot chat.
 3. A digest is eligible only after a new public event and after the live playlist's `last_sync_at` reaches that event.
 4. A subscriber receives at most one digest per tastemaker per Moscow day. Different tastemakers may each send one digest.
