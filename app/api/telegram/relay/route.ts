@@ -5,8 +5,13 @@ export const maxDuration = 30;
 const allowedMethods = new Set(["sendMessage", "setWebhook", "getWebhookInfo"]);
 
 export async function POST(request: NextRequest) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
+  const supplied = request.headers.get("authorization");
+  const trustedSecrets = [
+    process.env.TELEGRAM_RELAY_SECRET,
+    process.env.TELEGRAM_WEBHOOK_SECRET,
+    process.env.CRON_SECRET
+  ].filter((value): value is string => Boolean(value));
+  if (!trustedSecrets.some(secret => supplied === `Bearer ${secret}`)) {
     return NextResponse.json({ ok: false, description: "UNAUTHORIZED" }, { status: 401 });
   }
 

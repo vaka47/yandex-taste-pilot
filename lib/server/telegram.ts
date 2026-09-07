@@ -21,11 +21,13 @@ async function telegramRequest<T>(method: string, payload: Record<string, unknow
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) throw new Error("TELEGRAM_NOT_CONFIGURED");
   const relayUrl = process.env.TELEGRAM_API_RELAY_URL?.trim();
+  const relaySecret = process.env.TELEGRAM_RELAY_SECRET || process.env.TELEGRAM_WEBHOOK_SECRET || process.env.CRON_SECRET;
+  if (relayUrl && !relaySecret) throw new Error("TELEGRAM_RELAY_NOT_CONFIGURED");
   const response = await fetch(relayUrl || `https://api.telegram.org/bot${token}/${method}`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      ...(relayUrl ? { authorization: `Bearer ${process.env.CRON_SECRET || ""}` } : {})
+      ...(relayUrl ? { authorization: `Bearer ${relaySecret}` } : {})
     },
     body: JSON.stringify(relayUrl ? { method, payload } : payload),
     cache: "no-store",
