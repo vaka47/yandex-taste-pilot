@@ -20,10 +20,14 @@ function html(value: string) {
 async function telegramRequest<T>(method: string, payload: Record<string, unknown>) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) throw new Error("TELEGRAM_NOT_CONFIGURED");
-  const response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
+  const relayUrl = process.env.TELEGRAM_API_RELAY_URL?.trim();
+  const response = await fetch(relayUrl || `https://api.telegram.org/bot${token}/${method}`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(payload),
+    headers: {
+      "content-type": "application/json",
+      ...(relayUrl ? { authorization: `Bearer ${process.env.CRON_SECRET || ""}` } : {})
+    },
+    body: JSON.stringify(relayUrl ? { method, payload } : payload),
     cache: "no-store",
     signal: AbortSignal.timeout(15_000)
   });
