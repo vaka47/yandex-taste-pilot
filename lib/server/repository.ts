@@ -122,7 +122,7 @@ export async function getPublicProfile(slug: string, viewerId: string | null): P
         e.fetched_at
       ) desc,
       case when coalesce(e.raw_metadata->>'providerPosition', '') ~ '^[0-9]+$' then (e.raw_metadata->>'providerPosition')::int end asc nulls last
-    limit ${viewerId ? 80 : 1}
+    limit ${viewerId ? 2000 : 1}
   `;
   return {
     id: row.id, slug: row.slug, name: row.name, gender: gender(row.gender), bio: row.bio, roleLine: row.role_line,
@@ -226,11 +226,24 @@ export async function getFollowingProfiles(userId: string) {
       where listening_events.tastemaker_id = t.id
         and listening_events.visibility = 'public'
         and listening_events.publish_at <= now()
-      order by coalesce(listening_events.observed_at, listening_events.fetched_at) desc
+      order by
+        coalesce(
+          listening_events.observed_at,
+          case when coalesce(listening_events.raw_metadata->>'observedDate', '') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then (listening_events.raw_metadata->>'observedDate')::date::timestamptz end,
+          listening_events.fetched_at
+        ) desc,
+        case when coalesce(listening_events.raw_metadata->>'providerPosition', '') ~ '^[0-9]+$' then (listening_events.raw_metadata->>'providerPosition')::int end asc nulls last
       limit 1
     ) e on true
     where f.user_id = ${userId} and f.unfollowed_at is null
-    order by coalesce(e.observed_at, e.fetched_at, f.followed_at) desc
+    order by
+      coalesce(
+        e.observed_at,
+        case when coalesce(e.raw_metadata->>'observedDate', '') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then (e.raw_metadata->>'observedDate')::date::timestamptz end,
+        e.fetched_at,
+        f.followed_at
+      ) desc,
+      case when coalesce(e.raw_metadata->>'providerPosition', '') ~ '^[0-9]+$' then (e.raw_metadata->>'providerPosition')::int end asc nulls last
   `;
   return rows.map(row => ({
     id: row.id as string,
@@ -255,7 +268,9 @@ export async function getHomeDiscoveryData(): Promise<{ profiles: HomeTastemaker
         roleLine: fixtureProfile.roleLine,
         avatarUrl: fixtureProfile.avatarUrl,
         latestTrack: event ? { id: event.id, title: event.track.title, artists: event.track.artists, coverUrl: event.track.coverUrl } : null,
-        updatedAt: event?.observedAt || event?.fetchedAt || null
+        updatedAt: event?.observedAt || null,
+        updatedDate: event?.observedDate || null,
+        fetchedAt: event?.fetchedAt || null
       }],
       activity: event ? [{
         id: event.id,
@@ -267,7 +282,9 @@ export async function getHomeDiscoveryData(): Promise<{ profiles: HomeTastemaker
         artists: event.track.artists,
         comment: event.comment?.body || null,
         eventId: event.id,
-        occurredAt: event.observedAt || event.fetchedAt
+        occurredAt: event.observedAt || event.fetchedAt,
+        occurredDate: event.observedDate || null,
+        fetchedAt: event.fetchedAt
       }] : []
     };
   }
@@ -276,25 +293,42 @@ export async function getHomeDiscoveryData(): Promise<{ profiles: HomeTastemaker
     db()`
       select t.id, t.slug, t.name, t.gender, t.role_line, t.avatar_url,
         e.id as event_id, e.track_title, e.artist_names, e.cover_url,
-        coalesce(e.observed_at, e.fetched_at) as latest_at
+        e.observed_at, e.fetched_at, e.raw_metadata
       from tastemakers t
       left join lateral (
-        select id, track_title, artist_names, cover_url, observed_at, fetched_at
+        select id, track_title, artist_names, cover_url, observed_at, fetched_at, raw_metadata
         from listening_events
         where tastemaker_id = t.id and visibility = 'public' and publish_at <= now()
-        order by coalesce(observed_at, fetched_at) desc
+        order by
+          coalesce(
+            observed_at,
+            case when coalesce(raw_metadata->>'observedDate', '') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then (raw_metadata->>'observedDate')::date::timestamptz end,
+            fetched_at
+          ) desc,
+          case when coalesce(raw_metadata->>'providerPosition', '') ~ '^[0-9]+$' then (raw_metadata->>'providerPosition')::int end asc nulls last
         limit 1
       ) e on true
       where t.is_public = true and t.status = 'active'
-      order by verified desc, coalesce(e.observed_at, e.fetched_at, t.updated_at) desc
+      order by verified desc, coalesce(
+        e.observed_at,
+        case when coalesce(e.raw_metadata->>'observedDate', '') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then (e.raw_metadata->>'observedDate')::date::timestamptz end,
+        e.fetched_at,
+        t.updated_at
+      ) desc
     `,
     db()`
-      select e.id, e.track_title, e.artist_names, t.name, t.slug, t.gender,
-        coalesce(e.observed_at, e.fetched_at) as occurred_at
+      select e.id, e.track_title, e.artist_names, e.observed_at, e.fetched_at, e.raw_metadata,
+        t.name, t.slug, t.gender
       from listening_events e
       join tastemakers t on t.id = e.tastemaker_id and t.is_public = true and t.status = 'active'
       where e.visibility = 'public' and e.publish_at <= now()
-      order by coalesce(e.observed_at, e.fetched_at) desc
+      order by
+        coalesce(
+          e.observed_at,
+          case when coalesce(e.raw_metadata->>'observedDate', '') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then (e.raw_metadata->>'observedDate')::date::timestamptz end,
+          e.fetched_at
+        ) desc,
+        case when coalesce(e.raw_metadata->>'providerPosition', '') ~ '^[0-9]+$' then (e.raw_metadata->>'providerPosition')::int end asc nulls last
       limit 12
     `,
     db()`
@@ -316,7 +350,9 @@ export async function getHomeDiscoveryData(): Promise<{ profiles: HomeTastemaker
     roleLine: String(row.role_line),
     avatarUrl: row.avatar_url ? String(row.avatar_url) : null,
     latestTrack: row.track_title ? { id: String(row.event_id), title: String(row.track_title), artists: Array.isArray(row.artist_names) ? row.artist_names.map(String) : [], coverUrl: row.cover_url ? String(row.cover_url) : null } : null,
-    updatedAt: row.latest_at?.toISOString?.() || (row.latest_at ? String(row.latest_at) : null)
+    updatedAt: row.observed_at?.toISOString?.() || (row.observed_at ? String(row.observed_at) : null),
+    updatedDate: row.raw_metadata?.observedDate ? String(row.raw_metadata.observedDate) : null,
+    fetchedAt: row.fetched_at?.toISOString?.() || (row.fetched_at ? String(row.fetched_at) : null)
   }));
   const activity: PublicActivity[] = [
     ...listenRows.map(row => ({
@@ -329,7 +365,9 @@ export async function getHomeDiscoveryData(): Promise<{ profiles: HomeTastemaker
       artists: Array.isArray(row.artist_names) ? row.artist_names.map(String) : [],
       comment: null,
       eventId: String(row.id),
-      occurredAt: row.occurred_at?.toISOString?.() || String(row.occurred_at)
+      occurredAt: row.observed_at?.toISOString?.() || (row.raw_metadata?.observedDate ? `${String(row.raw_metadata.observedDate)}T00:00:00.000Z` : row.fetched_at?.toISOString?.() || String(row.fetched_at)),
+      occurredDate: row.raw_metadata?.observedDate ? String(row.raw_metadata.observedDate) : null,
+      fetchedAt: row.fetched_at?.toISOString?.() || String(row.fetched_at)
     })),
     ...commentRows.map(row => ({
       id: `comment-${String(row.id)}`,
@@ -341,7 +379,9 @@ export async function getHomeDiscoveryData(): Promise<{ profiles: HomeTastemaker
       artists: Array.isArray(row.artist_names) ? row.artist_names.map(String) : [],
       comment: String(row.body),
       eventId: String(row.event_id),
-      occurredAt: row.occurred_at?.toISOString?.() || String(row.occurred_at)
+      occurredAt: row.occurred_at?.toISOString?.() || String(row.occurred_at),
+      occurredDate: null,
+      fetchedAt: row.occurred_at?.toISOString?.() || String(row.occurred_at)
     }))
   ].sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt)).slice(0, 12);
   return { profiles, activity };

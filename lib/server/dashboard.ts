@@ -169,15 +169,16 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
           select count(*)::int from (
             select coalesce(rv.user_id::text, (
               select max(link.user_id::text) from analytics_events link
-              where link.anonymous_id = rv.anonymous_id and link.user_id is not null
+              where link.anonymous_id = rv.anonymous_id and link.user_id is not null and link.is_internal = false
             ), rv.anonymous_id) as visitor
             from analytics_events rv
             where rv.tastemaker_id = t.id and rv.event_name = 'tastemaker_profile_view'
+              and rv.is_internal = false
               and rv.created_at >= now() - interval '7 days'
               and coalesce(rv.user_id::text, rv.anonymous_id) is not null
             group by coalesce(rv.user_id::text, (
               select max(link.user_id::text) from analytics_events link
-              where link.anonymous_id = rv.anonymous_id and link.user_id is not null
+              where link.anonymous_id = rv.anonymous_id and link.user_id is not null and link.is_internal = false
             ), rv.anonymous_id)
             having count(distinct (rv.created_at at time zone 'Europe/Moscow')::date) >= 2
           ) returning_visitors
@@ -207,10 +208,10 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
         from (
           select ae.*, coalesce(ae.user_id::text, (
             select max(link.user_id::text) from analytics_events link
-            where link.anonymous_id = ae.anonymous_id and link.user_id is not null
+            where link.anonymous_id = ae.anonymous_id and link.user_id is not null and link.is_internal = false
           ), ae.anonymous_id) as actor
           from analytics_events ae
-          where ae.tastemaker_id = t.id and ae.created_at >= now() - interval '7 days'
+          where ae.tastemaker_id = t.id and ae.created_at >= now() - interval '7 days' and ae.is_internal = false
         ) recent
       ) a on true
       left join lateral (
@@ -227,11 +228,11 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
     db()`
       with identity_map as (
         select anonymous_id, max(user_id::text) as linked_user_id from analytics_events
-        where anonymous_id is not null and user_id is not null group by anonymous_id
+        where anonymous_id is not null and user_id is not null and is_internal = false group by anonymous_id
       ), recent as (
         select a.*, coalesce(a.user_id::text, im.linked_user_id, a.anonymous_id) as actor
         from analytics_events a left join identity_map im on im.anonymous_id = a.anonymous_id
-        where a.created_at >= now() - interval '7 days'
+        where a.created_at >= now() - interval '7 days' and a.is_internal = false
       )
       select
         count(distinct actor) filter (where event_name = 'tastemaker_profile_view')::int as unique_visitors_7d,
@@ -249,7 +250,15 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
         ) as return_visitors_7d
       from recent
     `,
-    db()`select count(*)::int as count from sync_logs where status = 'failed' and started_at >= now() - interval '24 hours'`,
+    db()`
+      select count(*)::int as count from (
+        select distinct on (coalesce(tastemaker_id::text, 'global'), job_type) status
+        from sync_logs
+        where started_at >= now() - interval '24 hours'
+        order by coalesce(tastemaker_id::text, 'global'), job_type, started_at desc
+      ) latest
+      where status = 'failed'
+    `,
     db()`
       select al.id, al.action, al.created_at, t.name as entity_name
       from audit_logs al left join tastemakers t on t.id::text = al.entity_id
@@ -265,12 +274,13 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
     db()`
       with identity_map as (
         select anonymous_id, max(user_id::text) as linked_user_id from analytics_events
-        where anonymous_id is not null and user_id is not null group by anonymous_id
+        where anonymous_id is not null and user_id is not null and is_internal = false group by anonymous_id
       ), visits as (
         select a.tastemaker_id, coalesce(a.user_id::text, im.linked_user_id, a.anonymous_id) as actor,
           (a.created_at at time zone 'Europe/Moscow')::date as visit_day
         from analytics_events a left join identity_map im on im.anonymous_id = a.anonymous_id
         where a.event_name = 'tastemaker_profile_view' and a.created_at >= now() - interval '70 days'
+          and a.is_internal = false
           and a.tastemaker_id is not null and coalesce(a.user_id::text, im.linked_user_id, a.anonymous_id) is not null
         group by a.tastemaker_id, actor, visit_day
       ), cohorts as (
@@ -288,12 +298,13 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
     db()`
       with identity_map as (
         select anonymous_id, max(user_id::text) as linked_user_id from analytics_events
-        where anonymous_id is not null and user_id is not null group by anonymous_id
+        where anonymous_id is not null and user_id is not null and is_internal = false group by anonymous_id
       ), visits as (
         select coalesce(a.user_id::text, im.linked_user_id, a.anonymous_id) as actor,
           (a.created_at at time zone 'Europe/Moscow')::date as visit_day
         from analytics_events a left join identity_map im on im.anonymous_id = a.anonymous_id
         where a.event_name = 'tastemaker_profile_view' and a.created_at >= now() - interval '70 days'
+          and a.is_internal = false
           and coalesce(a.user_id::text, im.linked_user_id, a.anonymous_id) is not null
         group by actor, visit_day
       ), cohorts as (
@@ -312,7 +323,7 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
       with follower_cohorts as (
         select f.tastemaker_id, f.user_id,
           (f.followed_at at time zone 'Europe/Moscow')::date as first_day
-        from follows f
+        from follows f join users follower on follower.id = f.user_id and follower.role = 'user'
         where f.followed_at >= now() - interval '70 days'
       ), today as (select (now() at time zone 'Europe/Moscow')::date as day)
       select fc.tastemaker_id,
@@ -320,6 +331,7 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
           where fc.first_day between today.day - 60 and today.day - 8 and exists (
             select 1 from analytics_events a
             where a.tastemaker_id = fc.tastemaker_id and a.user_id = fc.user_id
+              and a.is_internal = false
               and a.event_name in ('tastemaker_profile_view', 'history_unlocked_view', 'following_page_view')
               and (a.created_at at time zone 'Europe/Moscow')::date between fc.first_day + 6 and fc.first_day + 8
           )
@@ -403,19 +415,34 @@ export async function getCreatorDashboardData(userId: string, role: Role): Promi
   const [events, analytics, blockedArtists] = await Promise.all([
     db()`
       select e.*, ec.id as comment_id, ec.body as comment_body, ec.updated_at as comment_updated_at,
-        count(*) over (partition by e.track_provider_id)::int as play_count_7d,
-        min(e.observed_at) over (partition by e.track_provider_id) as first_seen_at
+        count(*) filter (where coalesce(
+          e.observed_at,
+          case when coalesce(e.raw_metadata->>'observedDate', '') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then (e.raw_metadata->>'observedDate')::date::timestamptz end,
+          e.fetched_at
+        ) >= now() - interval '7 days') over (partition by e.track_provider_id)::int as play_count_7d,
+        min(coalesce(
+          e.observed_at,
+          case when coalesce(e.raw_metadata->>'observedDate', '') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then (e.raw_metadata->>'observedDate')::date::timestamptz end,
+          e.fetched_at
+        )) over (partition by e.track_provider_id) as first_seen_at
       from listening_events e
       left join event_comments ec on ec.listening_event_id = e.id and ec.is_public = true
       where e.tastemaker_id = ${maker.id}
-      order by coalesce(e.observed_at, e.fetched_at) desc limit 80
+      order by
+        coalesce(
+          e.observed_at,
+          case when coalesce(e.raw_metadata->>'observedDate', '') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then (e.raw_metadata->>'observedDate')::date::timestamptz end,
+          e.fetched_at
+        ) desc,
+        case when coalesce(e.raw_metadata->>'providerPosition', '') ~ '^[0-9]+$' then (e.raw_metadata->>'providerPosition')::int end asc nulls last
+      limit 2000
     `,
     db()`
       select
         count(distinct coalesce(user_id::text, anonymous_id)) filter (where event_name = 'tastemaker_profile_view')::int as unique_visitors_7d,
         count(*) filter (where event_name = 'tastemaker_profile_view')::int as profile_views_7d,
         count(*) filter (where event_name = 'track_open_click')::int as track_opens_7d
-      from analytics_events where tastemaker_id = ${maker.id} and created_at >= now() - interval '7 days'
+      from analytics_events where tastemaker_id = ${maker.id} and created_at >= now() - interval '7 days' and is_internal = false
     `,
     db()`select id, artist_name_normalized from blocked_artists where tastemaker_id = ${maker.id} order by artist_name_normalized`
   ]);

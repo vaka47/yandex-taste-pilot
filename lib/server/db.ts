@@ -353,6 +353,7 @@ async function createSchema() {
       utm_medium text,
       utm_campaign text,
       referrer text,
+      is_internal boolean not null default false,
       created_at timestamptz not null default now()
     )
   `;
@@ -360,6 +361,8 @@ async function createSchema() {
   await sql`create index if not exists analytics_event_idx on analytics_events(event_name, created_at desc)`;
   await sql`create index if not exists analytics_user_idx on analytics_events(user_id, created_at desc)`;
   await sql`create index if not exists analytics_anon_idx on analytics_events(anonymous_id, created_at desc)`;
+  await sql`alter table analytics_events add column if not exists is_internal boolean not null default false`;
+  await sql`create index if not exists analytics_external_event_idx on analytics_events(event_name, created_at desc) where is_internal = false`;
   await sql`
     create table if not exists sync_logs (
       id uuid primary key default gen_random_uuid(),

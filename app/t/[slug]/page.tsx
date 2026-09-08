@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { ProfileClient } from "@/components/ProfileClient";
 import { PublicHeader } from "@/components/PublicHeader";
@@ -5,8 +6,32 @@ import { getPublicProfile } from "@/lib/server/repository";
 import { getSessionUser } from "@/lib/server/session";
 import { syncTastemakerFully } from "@/lib/server/sync";
 import { after } from "next/server";
+import { appUrl } from "@/lib/server/config";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const requestedSlug = slug === "pilot-author" ? "safonov-ivan" : slug;
+  const profile = await getPublicProfile(requestedSlug, null);
+  if (!profile) notFound();
+  const description = `${profile.roleLine}. Реальная история прослушиваний за 30 дней, повторы и живой плейлист в Taste.`;
+  const canonical = `${appUrl()}/t/${profile.slug}`;
+  return {
+    title: `${profile.name} — история прослушиваний`,
+    description,
+    alternates: { canonical },
+    openGraph: {
+      title: `Что слушает ${profile.name}`,
+      description,
+      url: canonical,
+      type: "profile",
+      locale: "ru_RU",
+      siteName: "Taste"
+    },
+    twitter: { card: "summary_large_image", title: `Что слушает ${profile.name}`, description }
+  };
+}
 
 export default async function TastemakerPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;

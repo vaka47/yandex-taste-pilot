@@ -88,11 +88,11 @@ export async function recordAnalytics(input: {
   await db()`
     insert into analytics_events (
       event_name, user_id, anonymous_id, session_id, tastemaker_id, track_provider_id,
-      properties, utm_source, utm_medium, utm_campaign, referrer
+      properties, utm_source, utm_medium, utm_campaign, referrer, is_internal
     ) values (
       ${input.eventName}, ${input.user?.id || null}, ${identity.anonymousId}, ${identity.sessionId},
       ${input.tastemakerId || null}, ${input.trackProviderId || null}, ${db().json(JSON.parse(JSON.stringify(input.properties || {})))},
-      ${utmSource}, ${utmMedium}, ${utmCampaign}, ${requestReferrer}
+      ${utmSource}, ${utmMedium}, ${utmCampaign}, ${requestReferrer}, ${input.user?.role === "creator" || input.user?.role === "admin"}
     )
   `;
   return true;

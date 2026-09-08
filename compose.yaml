@@ -110,7 +110,9 @@ services:
     logging: *default-logging
 
   backup:
-    image: postgres:18-alpine
+    build:
+      context: .
+      dockerfile: deploy/backup.Dockerfile
     restart: unless-stopped
     init: true
     environment:
@@ -118,23 +120,14 @@ services:
       PGDATABASE: ${POSTGRES_DATABASE:-taste}
       PGUSER: ${POSTGRES_USER:-taste}
       PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      OBJECT_STORAGE_ENABLED: ${OBJECT_STORAGE_ENABLED:-false}
+      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-}
+      BACKUP_ENCRYPTION_KEY: ${BACKUP_ENCRYPTION_KEY:-}
     depends_on:
       db:
         condition: service_healthy
     volumes:
       - database-backups:/backups
-    entrypoint:
-      - /bin/sh
-      - -ec
-    command:
-      - |
-        while true; do
-          stamp=$$(date -u +%Y%m%dT%H%M%SZ)
-          pg_dump --format=custom --compress=6 --file="/backups/taste-$${stamp}.dump.tmp"
-          mv "/backups/taste-$${stamp}.dump.tmp" "/backups/taste-$${stamp}.dump"
-          find /backups -type f -name 'taste-*.dump' -mtime +7 -delete
-          sleep 86400
-        done
     mem_limit: 160m
     cpus: 0.25
     logging: *default-logging

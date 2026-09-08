@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "@/components/Icons";
-import { relativeTime } from "@/lib/format";
+import { listeningTime } from "@/lib/format";
 import { commentedVerb, listenedVerb } from "@/lib/tastemaker-copy";
 import type { HomeTastemaker, PublicActivity } from "@/types/domain";
 
@@ -48,14 +48,14 @@ export function HomeDiscoveryClient({ profiles, activity }: { profiles: HomeTast
       <section className="landingHero">
         <div className="landingCopy">
           <span className="landingKicker"><i /> музыка людей, которым вы верите</span>
-          <h1><span className="landingTitleLead">Слушай мир</span><em>чужими ушами</em></h1>
+          <h1><span className="landingTitleLead">Слушай мир</span>{" "}<em>чужими ушами</em></h1>
           <p><span className="landingDescriptionLine">Живая музыкальная история людей,</span>{" "}<span className="landingDescriptionLine">чьему вкусу вы доверяете</span></p>
           <div className="landingHeroActions"><a className="landingPrimary" href="#discover"><Icon name="search" />Найти Саундмейкера</a><Link className="landingSecondary" href="/about">Как это устроено <Icon name="arrow" /></Link></div>
         </div>
         <div className="landingVisual" onPointerEnter={() => setPaused(true)} onPointerLeave={() => setPaused(false)} onFocusCapture={() => setPaused(true)} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setPaused(false); }} onPointerDown={event => { pointerStart.current = event.clientX; }} onPointerUp={event => endSwipe(event.clientX)} onPointerCancel={() => { pointerStart.current = null; }}>
           {current ? <><Link className="landingMakerIntro" href={`/t/${current.slug}`}><strong>{current.name}</strong>{current.roleLine ? <span>{current.roleLine}</span> : null}</Link><Link key={`${current.id}:${current.latestTrack?.id || "empty"}`} className="landingSlide" href={`/t/${current.slug}`} aria-label={`Открыть профиль ${current.name}`}>
             <div className="landingSlidePortrait">{current.avatarUrl ? <img src={current.avatarUrl} alt={current.name} draggable={false} /> : <span>{current.name.split(" ").map(word => word[0]).join("").slice(0, 2)}</span>}</div>
-            <div className="landingSignalCard"><small>{current.updatedAt ? `обновлено ${relativeTime(current.updatedAt)}` : "история подключена"}</small><strong>{current.latestTrack?.title || current.name}</strong><span>{current.latestTrack ? current.latestTrack.artists.join(", ") : current.roleLine}</span><span className="landingSignalCover">{current.latestTrack?.coverUrl ? <img src={current.latestTrack.coverUrl} alt="" /> : <Icon name="music" />}</span></div>
+            <div className="landingSignalCard"><small>{current.updatedAt || current.updatedDate || current.fetchedAt ? `обновлено ${listeningTime({ observedAt: current.updatedAt, observedDate: current.updatedDate, fetchedAt: current.fetchedAt || current.updatedAt || new Date(0).toISOString() })}` : "история подключена"}</small><strong>{current.latestTrack?.title || current.name}</strong><span>{current.latestTrack ? current.latestTrack.artists.join(", ") : current.roleLine}</span><span className="landingSignalCover">{current.latestTrack?.coverUrl ? <img src={current.latestTrack.coverUrl} alt="" /> : <Icon name="music" />}</span></div>
           </Link></> : <div className="landingSlide landingSlideEmpty"><div className="landingSlidePortrait"><Icon name="music" size={52} /></div><div className="landingSignalCard"><strong>Taste</strong><span>Скоро здесь появятся первые Саундмейкеры</span></div></div>}
           {profiles.length > 1 ? <><button className="landingCarouselArrow previous" type="button" onClick={() => shift(-1)} aria-label="Предыдущий Саундмейкер"><Icon name="chevron" size={34} strokeWidth={2.6} /></button><button className="landingCarouselArrow next" type="button" onClick={() => shift(1)} aria-label="Следующий Саундмейкер"><Icon name="chevron" size={34} strokeWidth={2.6} /></button><div className="landingCarouselDots" aria-label={`Слайд ${active + 1} из ${profiles.length}`}>{profiles.map((profile, index) => <button key={profile.id} className={index === active ? "active" : ""} type="button" onClick={() => setActive(index)} aria-label={`Показать ${profile.name}`} aria-current={index === active ? "true" : undefined} />)}</div></> : null}
         </div>
@@ -70,7 +70,7 @@ export function HomeDiscoveryClient({ profiles, activity }: { profiles: HomeTast
 
       <section className="landingActivity">
         <header><span>прямо сейчас</span><h2>Что нового в Taste</h2></header>
-        <div>{activity.length ? activity.map((item, index) => <Link href={item.kind === "comment" ? `/go/track/${item.eventId}?source=home_comment&position=${index + 1}` : `/t/${item.tastemakerSlug}`} target={item.kind === "comment" ? "_blank" : undefined} rel={item.kind === "comment" ? "noreferrer" : undefined} key={item.id}><span>{String(index + 1).padStart(2, "0")}</span><p>{item.kind === "comment" ? <><strong>{item.tastemakerName}</strong> {commentedVerb(item.tastemakerGender)} трек «{item.trackTitle}»: <em>«{item.comment}»</em></> : <><strong>{item.tastemakerName}</strong> {listenedVerb(item.tastemakerGender)} «{item.trackTitle}»</>}</p><time>{relativeTime(item.occurredAt)}</time><Icon name="arrow" /></Link>) : <p className="landingActivityEmpty">Первые обновления появятся после подключения истории Саундмейкера.</p>}</div>
+        <div>{activity.length ? activity.map((item, index) => <Link href={item.kind === "comment" ? `/go/track/${item.eventId}?source=home_comment&position=${index + 1}` : `/t/${item.tastemakerSlug}`} target={item.kind === "comment" ? "_blank" : undefined} rel={item.kind === "comment" ? "noreferrer" : undefined} key={item.id}><span>{String(index + 1).padStart(2, "0")}</span><p>{item.kind === "comment" ? <><strong>{item.tastemakerName}</strong> {commentedVerb(item.tastemakerGender)} трек «{item.trackTitle}»: <em>«{item.comment}»</em></> : <><strong>{item.tastemakerName}</strong> {listenedVerb(item.tastemakerGender)} «{item.trackTitle}»</>}</p><time>{listeningTime({ observedAt: item.occurredDate ? null : item.occurredAt, observedDate: item.occurredDate, fetchedAt: item.fetchedAt })}</time><Icon name="arrow" /></Link>) : <p className="landingActivityEmpty">Первые обновления появятся после подключения истории Саундмейкера.</p>}</div>
       </section>
     </>
   );

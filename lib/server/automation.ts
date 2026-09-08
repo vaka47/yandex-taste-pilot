@@ -15,7 +15,7 @@ export type AutomationResult = {
 };
 
 function safeSource(value: string) {
-  return ["gcp_scheduler", "github_schedule", "github_watchdog", "vercel_daily", "manual", "unknown"].includes(value) ? value : "unknown";
+  return ["vm_scheduler", "gcp_scheduler", "github_schedule", "github_watchdog", "vercel_daily", "manual", "unknown"].includes(value) ? value : "unknown";
 }
 
 export async function runAutomationCycle(sourceValue = "unknown"): Promise<AutomationResult> {

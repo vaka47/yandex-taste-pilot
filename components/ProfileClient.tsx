@@ -83,7 +83,7 @@ export function ProfileClient({ initialProfile, session }: { initialProfile: Tas
       setTelegramState(state);
       if (state.subscribed) {
         setTelegramBusy(false);
-        setToast({ tone: "success", text: `Уведомления о ${profile.name} включены.` });
+        setToast({ tone: "success", text: `Уведомления включены: ${profile.name}.` });
       }
     }, 3000);
     return () => window.clearInterval(interval);
@@ -106,14 +106,14 @@ export function ProfileClient({ initialProfile, session }: { initialProfile: Tas
   }
 
   async function follow() {
+    if (profile.viewerFollows) {
+      setUnfollowConfirmOpen(true);
+      return;
+    }
     trackEvent("follow_click", { tastemakerId: profile.id });
     if (!session) {
       setAuthIntent("follow");
       setAuthOpen(true);
-      return;
-    }
-    if (profile.viewerFollows) {
-      setUnfollowConfirmOpen(true);
       return;
     }
     const ok = await setFollowing(true);
@@ -190,7 +190,7 @@ export function ProfileClient({ initialProfile, session }: { initialProfile: Tas
       setTelegramState({ available: true, connected: true, subscribed: true });
       setTelegramBusy(false);
       setPlaylistPromptOpen(false);
-      setToast({ tone: "success", text: `Уведомления о ${profile.name} включены.` });
+      setToast({ tone: "success", text: `Уведомления включены: ${profile.name}.` });
       return;
     }
     const telegramUrl = payload.url;
@@ -217,7 +217,7 @@ export function ProfileClient({ initialProfile, session }: { initialProfile: Tas
     if (!response.ok) return setToast({ tone: "error", text: "Не удалось отключить уведомления." });
     setTelegramState(current => ({ ...current, subscribed: false }));
     trackEvent("telegram_disconnected", { tastemakerId: profile.id });
-    setToast({ tone: "neutral", text: `Уведомления о ${profile.name} отключены.` });
+    setToast({ tone: "neutral", text: `Уведомления отключены: ${profile.name}.` });
   }
 
   const authReturnTo = authIntent === "telegram" ? `/t/${profile.slug}?telegram=connect` : `/t/${profile.slug}`;
@@ -239,7 +239,7 @@ export function ProfileClient({ initialProfile, session }: { initialProfile: Tas
 
           <div className="heroCopy">
             <div className="eyebrowRow"><span className="eyebrow"><i />{profile.lastSyncAt ? `обновлено ${relativeTime(profile.lastSyncAt)}` : "история включена"}</span></div>
-            <h1 className="profileHeadline"><span className="profileHeadlineLead">Что слушает</span><span>{profile.name}</span></h1>
+            <h1 className="profileHeadline"><span className="profileHeadlineLead">Что слушает</span>{" "}<span>{profile.name}</span></h1>
             {profile.roleLine || profile.verified ? <div className="identityLine">{profile.roleLine ? <strong>{profile.roleLine}</strong> : null}{profile.verified ? <i className="verified"><Icon name="check" size={12} /></i> : null}</div> : null}
             {profile.bio ? <p>{profile.bio}</p> : null}
             <div className={`heroActions ${!session ? "anonymousActions" : ""}`}>
@@ -260,7 +260,7 @@ export function ProfileClient({ initialProfile, session }: { initialProfile: Tas
 
         <section className="listeningSection">
           <header className="sectionHeader"><div><span>последние обновления</span><h2>История прослушиваний</h2></div><p>Нажмите на трек, чтобы открыть его в Яндекс Музыке.</p></header>
-          <div className={`eventList ${profile.historyAccess === "full" ? "eventListScrollable" : ""}`} tabIndex={profile.historyAccess === "full" ? 0 : undefined} aria-label={profile.historyAccess === "full" ? "Последние шесть прослушиваний. Список прокручивается." : undefined}>
+          <div className={`eventList ${profile.historyAccess === "full" ? "eventListScrollable" : ""}`} tabIndex={profile.historyAccess === "full" ? 0 : undefined} aria-label={profile.historyAccess === "full" ? `История прослушиваний за 30 дней: ${profile.events.length} событий. Список прокручивается.` : undefined}>
             {(profile.historyAccess === "teaser" ? profile.events.slice(0, 1) : profile.events).map((event, index) => (
               <a className={`eventRow ${event.track.coverUrl ? "" : "noArtwork"}`} key={event.id} href={`/go/track/${event.id}?source=recent&position=${index + 1}`} target="_blank" rel="noreferrer" aria-label={`Открыть ${event.track.title} в Яндекс Музыке`}>
                 <span className="eventIndex">{String(index + 1).padStart(2, "0")}</span>
@@ -276,7 +276,7 @@ export function ProfileClient({ initialProfile, session }: { initialProfile: Tas
           </div>
         </section>
 
-        {profile.historyAccess === "teaser" ? <section className="historyUnlockSection"><div className="unlockIntro"><div className="unlockSignal" aria-hidden="true"><i /><i /><i /><i /></div><span>продолжение после входа</span></div><h2>Последний трек уже здесь. Остальное откроется вам после входа</h2><p>Войдите через Яндекс ID, чтобы увидеть всю историю, повторы и комментарии Саундмейкера. Taste не получает доступ к вашей музыке.</p><div className="unlockBenefits"><span><Icon name="music" />Полная история</span><span><Icon name="pulse" />Повторы за 7 дней</span><span><Icon name="spark" />Комментарии Саундмейкера</span></div><Link className="historyUnlockAction" href={unlockHref} onClick={() => trackEvent("history_unlock_click", { tastemakerId: profile.id })}><span>Я</span>Войти и продолжить <Icon name="arrow" /></Link></section> : <>
+        {profile.historyAccess === "teaser" ? <section className="historyUnlockSection"><div className="unlockIntro"><div className="unlockSignal" aria-hidden="true"><i /><i /><i /><i /></div><span>продолжение после входа</span></div><h2>Последний трек уже здесь. Остальное откроется вам после входа</h2><p>Войдите через Яндекс ID, чтобы увидеть историю за 30 дней, повторы и комментарии Саундмейкера. Taste не получает доступ к вашей музыке.</p><div className="unlockBenefits"><span><Icon name="music" />История за 30 дней</span><span><Icon name="pulse" />Повторы за 7 дней</span><span><Icon name="spark" />Комментарии Саундмейкера</span></div><Link className="historyUnlockAction" href={unlockHref} onClick={() => trackEvent("history_unlock_click", { tastemakerId: profile.id })}><span>Я</span>Войти и продолжить <Icon name="arrow" /></Link></section> : <>
           <section className="repeatSection">
             <header className="sectionHeader sectionHeaderLight"><div><span>возвращается снова</span><h2>На повторе</h2></div><p>Треки, которые встречались в истории несколько раз за 7 дней.</p></header>
           <div className="repeatGrid" aria-label="Треки на повторе">{onRepeat.length ? onRepeat.map((event, index) => <a href={`/go/track/${event.id}?source=on_repeat&position=${index + 1}`} target="_blank" rel="noreferrer" className={`repeatItem ${event.track.coverUrl ? "" : "noArtwork"}`} key={event.id}><CoverArt url={event.track.coverUrl} title={event.track.title} size="large" /><span className="repeatRank">{String(index + 1).padStart(2, "0")}</span><strong>{event.track.title}</strong><span>{event.track.artists.join(", ")}</span><em>{event.consecutiveCount >= 2 ? `${event.consecutiveCount} подряд · ${event.playCount7d} за 7 дней` : `${event.playCount7d} раза за 7 дней`}</em></a>) : <div className="sectionEmpty"><Icon name="pulse" /><strong>Повторы ещё не накопились</strong><span>Они появятся, когда Саундмейкер вернётся к одному треку несколько раз.</span></div>}</div>
@@ -289,7 +289,7 @@ export function ProfileClient({ initialProfile, session }: { initialProfile: Tas
 
         <section className={`telegramInvite ${telegramState.subscribed ? "isActive" : ""}`}>
           <span className="telegramInviteIcon"><Icon name="send" /></span>
-          <div><small>обновления без лишнего шума</small><h2>{telegramState.subscribed ? `Вы получаете новости о ${profile.name}` : "Узнавайте о новой музыке в Telegram"}</h2><p>{telegramState.subscribed ? "Дневная сводка придёт в вашем персональном слоте с 12:00 до 21:00 по Москве, а комментарии Саундмейкера — сразу." : "Taste назначит отдельный дневной слот с 12:00 до 21:00 по Москве и пришлёт одну сводку, если история Саундмейкера обновилась. Комментарии приходят сразу."}</p></div>
+          <div><small>обновления без лишнего шума</small><h2>{telegramState.subscribed ? `Уведомления включены: ${profile.name}` : "Узнавайте о новой музыке в Telegram"}</h2><p>{telegramState.subscribed ? "Дневная сводка придёт в вашем персональном слоте с 12:00 до 21:00 по Москве, а комментарии Саундмейкера — сразу." : "Taste назначит отдельный дневной слот с 12:00 до 21:00 по Москве и пришлёт одну сводку, если история Саундмейкера обновилась. Комментарии приходят сразу."}</p></div>
           <button type="button" disabled={telegramBusy || (!telegramState.available && !telegramState.subscribed)} onClick={() => void (telegramState.subscribed ? disconnectTelegram() : connectTelegram())}>{telegramBusy ? "Подключаем…" : telegramState.subscribed ? "Отключить" : telegramState.available ? "Получать уведомления" : "Скоро"}<Icon name="arrow" /></button>
         </section>
       </main>
@@ -298,9 +298,9 @@ export function ProfileClient({ initialProfile, session }: { initialProfile: Tas
 
       {playlistPromptOpen ? <div className="modalBackdrop" role="presentation" onMouseDown={event => { if (event.currentTarget === event.target) setPlaylistPromptOpen(false); }}><section className="authModal playlistPrompt" role="dialog" aria-modal="true" aria-labelledby="playlist-prompt-title"><button className="modalClose" type="button" onClick={() => setPlaylistPromptOpen(false)} aria-label="Закрыть"><Icon name="x" /></button><div className="playlistPromptStatus"><span className="modalSignal"><i /><i /><i /></span><small>подписка оформлена</small></div><h2 id="playlist-prompt-title">Откройте историю прослушиваний вашего Саундмейкера в Яндекс Музыке</h2><p>Когда ваш кумир слушает новый трек, он автоматически появляется по этой постоянной ссылке. Нажмите на сердце в Яндекс Музыке, чтобы сохранить плейлист и не потерять его.{!telegramState.subscribed ? " Подключите Telegram, чтобы не пропустить новую музыку, которую сегодня послушал ваш Саундмейкер." : ""}</p>{profile.playlistUrl ? <a className="yandexLogin" href={`/go/playlist/${profile.id}?source=follow_success`} target="_blank" rel="noreferrer" onClick={() => setPlaylistPromptOpen(false)}><span>Я</span>Открыть в Яндекс Музыке<Icon name="arrow" /></a> : <button className="yandexLogin playlistPreparing" type="button" disabled><span>Я</span>Плейлист создаётся<Icon name="clock" /></button>}{!telegramState.subscribed ? <button className="telegramPromptAction" type="button" disabled={!telegramState.available || telegramBusy} onClick={() => void connectTelegram()}><Icon name="send" />{telegramBusy ? "Подключаем…" : telegramState.available ? "Получать обновления в Telegram" : "Telegram скоро подключим"}</button> : null}<button className="playlistPromptLater" type="button" onClick={() => setPlaylistPromptOpen(false)}>Вернуться в Taste</button></section></div> : null}
 
-      {unfollowConfirmOpen ? <div className="modalBackdrop" role="presentation" onMouseDown={event => { if (event.currentTarget === event.target) setUnfollowConfirmOpen(false); }}><section className="authModal unfollowConfirm" role="alertdialog" aria-modal="true" aria-labelledby="unfollow-title"><button className="modalClose" type="button" onClick={() => setUnfollowConfirmOpen(false)} aria-label="Закрыть"><Icon name="x" /></button><span className="confirmModalIcon"><Icon name="pulse" /></span><h2 id="unfollow-title">Отписаться от {profile.name}?</h2><p>История исчезнет из ваших подписок, а Telegram-уведомления об этом Саундмейкере отключатся.</p><div><button type="button" className="playlistPromptLater" onClick={() => setUnfollowConfirmOpen(false)}>Остаться</button><button type="button" className="dangerButton" onClick={() => void confirmUnfollow()}>Отписаться</button></div></section></div> : null}
+      {unfollowConfirmOpen ? <div className="modalBackdrop" role="presentation" onMouseDown={event => { if (event.currentTarget === event.target) setUnfollowConfirmOpen(false); }}><section className="authModal unfollowConfirm" role="alertdialog" aria-modal="true" aria-labelledby="unfollow-title"><button className="modalClose" type="button" onClick={() => setUnfollowConfirmOpen(false)} aria-label="Закрыть"><Icon name="x" /></button><span className="confirmModalIcon"><Icon name="pulse" /></span><h2 id="unfollow-title">Отменить подписку: {profile.name}?</h2><p>История исчезнет из ваших подписок, а Telegram-уведомления этого Саундмейкера отключатся.</p><div><button type="button" className="playlistPromptLater" onClick={() => setUnfollowConfirmOpen(false)}>Остаться</button><button type="button" className="dangerButton" onClick={() => void confirmUnfollow()}>Отписаться</button></div></section></div> : null}
 
-      {authOpen ? <div className="modalBackdrop" role="presentation" onMouseDown={event => { if (event.currentTarget === event.target) setAuthOpen(false); }}><section className="authModal" role="dialog" aria-modal="true" aria-labelledby="auth-title"><button className="modalClose" type="button" onClick={() => setAuthOpen(false)} aria-label="Закрыть"><Icon name="x" /></button><span className="modalSignal"><i /><i /><i /></span><small>без доступа к вашей музыке</small><h2 id="auth-title">{authIntent === "telegram" ? `Получать обновления о ${profile.name}` : `Подписаться на ${profile.name}`}</h2><p>Яндекс ID нужен только для вашей учётной записи Taste. После входа подписка оформится автоматически.</p><Link className="yandexLogin" href={authHref}><span>Я</span>Продолжить с Яндекс ID<Icon name="arrow" /></Link></section></div> : null}
+      {authOpen ? <div className="modalBackdrop" role="presentation" onMouseDown={event => { if (event.currentTarget === event.target) setAuthOpen(false); }}><section className="authModal" role="dialog" aria-modal="true" aria-labelledby="auth-title"><button className="modalClose" type="button" onClick={() => setAuthOpen(false)} aria-label="Закрыть"><Icon name="x" /></button><span className="modalSignal"><i /><i /><i /></span><small>без доступа к вашей музыке</small><h2 id="auth-title">{authIntent === "telegram" ? `Подключить уведомления · ${profile.name}` : `Оформить подписку · ${profile.name}`}</h2><p>Яндекс ID нужен только для вашей учётной записи Taste. После входа подписка оформится автоматически.</p><Link className="yandexLogin" href={authHref}><span>Я</span>Продолжить с Яндекс ID<Icon name="arrow" /></Link></section></div> : null}
 
       {toast ? <div className={`toast ${toast.tone}`} role={toast.tone === "error" ? "alert" : "status"}><Icon name={toast.tone === "error" ? "shield" : toast.tone === "success" ? "check" : "pulse"} />{toast.text}</div> : null}
     </>

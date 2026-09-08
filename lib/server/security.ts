@@ -4,7 +4,7 @@ import { appUrl } from "@/lib/server/config";
 
 export function sameOrigin(request: NextRequest) {
   const origin = request.headers.get("origin");
-  if (!origin) return true;
+  if (!origin) return false;
   try {
     return new URL(origin).origin === new URL(appUrl()).origin || new URL(origin).origin === request.nextUrl.origin;
   } catch {

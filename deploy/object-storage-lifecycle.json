@@ -1,0 +1,14 @@
+{
+  "lifecycleRules": [
+    {
+      "id": "DeleteOldDatabaseBackups",
+      "enabled": true,
+      "filter": {
+        "prefix": "database/"
+      },
+      "expiration": {
+        "days": "30"
+      }
+    }
+  ]
+}

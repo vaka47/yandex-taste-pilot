@@ -41,6 +41,8 @@ export type HomeTastemaker = {
   avatarUrl: string | null;
   latestTrack: { id: string; title: string; artists: string[]; coverUrl: string | null } | null;
   updatedAt: string | null;
+  updatedDate: string | null;
+  fetchedAt: string | null;
 };
 
 export type PublicActivity = {
@@ -54,6 +56,8 @@ export type PublicActivity = {
   comment: string | null;
   eventId: string;
   occurredAt: string;
+  occurredDate: string | null;
+  fetchedAt: string;
 };
 
 export type TastemakerProfile = {

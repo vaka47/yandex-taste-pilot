@@ -3,6 +3,7 @@ import { ANALYTICS_EVENTS, recordAnalytics } from "@/lib/server/analytics";
 import { getSessionUser } from "@/lib/server/session";
 import { hashToken } from "@/lib/server/crypto";
 import { inMemoryRateLimit, sameOrigin } from "@/lib/server/security";
+import { db, ensureSchema, isDatabaseConfigured } from "@/lib/server/db";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -11,13 +12,19 @@ export async function POST(request: NextRequest) {
   const length = Number(request.headers.get("content-length") || 0);
   if (length > 8192) return NextResponse.json({ error: "PAYLOAD_TOO_LARGE" }, { status: 413 });
   const actor = request.cookies.get("taste_anon")?.value || request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-  if (!inMemoryRateLimit(`analytics:${hashToken(actor)}`, 240, 5 * 60_000)) {
+  if (!inMemoryRateLimit(`analytics:${hashToken(actor)}`, 120, 5 * 60_000)) {
     return NextResponse.json({ error: "RATE_LIMITED" }, { status: 429 });
   }
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   const eventName = typeof body?.eventName === "string" ? body.eventName : "";
   if (!ANALYTICS_EVENTS.has(eventName)) return NextResponse.json({ error: "EVENT_NOT_ALLOWED" }, { status: 400 });
   const tastemakerId = typeof body?.tastemakerId === "string" && UUID.test(body.tastemakerId) ? body.tastemakerId : null;
+  if (body?.tastemakerId && !tastemakerId) return NextResponse.json({ error: "INVALID_TASTEMAKER" }, { status: 400 });
+  if (tastemakerId && isDatabaseConfigured()) {
+    await ensureSchema();
+    const exists = await db()`select 1 from tastemakers where id = ${tastemakerId} and status <> 'archived' limit 1`;
+    if (!exists[0]) return NextResponse.json({ error: "TASTEMAKER_NOT_FOUND" }, { status: 404 });
+  }
   const trackProviderId = typeof body?.trackProviderId === "string" ? body.trackProviderId.slice(0, 160) : null;
   const user = await getSessionUser();
   await recordAnalytics({

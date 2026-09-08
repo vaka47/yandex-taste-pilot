@@ -1,0 +1,19 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowTasteVmToUploadDatabaseBackups",
+      "Effect": "Allow",
+      "Principal": {
+        "CanonicalUser": "ajegfrptcak5a18q1pse"
+      },
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::nitca-production-backups/database/*",
+      "Condition": {
+        "Bool": {
+          "aws:SecureTransport": "true"
+        }
+      }
+    }
+  ]
+}

@@ -187,7 +187,7 @@ async function consumeStartToken(rawToken: string, message: TelegramMessage) {
   });
   await sendMessage(
     String(message.chat.id),
-    `Готово! Вы подписались на обновления <a href="${appUrl()}/t/${result.slug}?utm_source=telegram&utm_medium=bot&utm_campaign=connected"><b>${html(result.name)}</b></a>.\n\nКогда в истории появится новая музыка, Taste пришлёт одну дневную сводку. Новые комментарии Саундмейкера придут сразу.\n\nОтключить уведомления можно в профиле Саундмейкера или командой /stop.`,
+    `Готово! Уведомления включены: <a href="${appUrl()}/t/${result.slug}?utm_source=telegram&utm_medium=bot&utm_campaign=connected"><b>${html(result.name)}</b></a>.\n\nКогда в истории появится новая музыка, Taste пришлёт одну дневную сводку. Новые комментарии Саундмейкера придут сразу.\n\nОтключить уведомления можно в профиле Саундмейкера или командой /stop.`,
     { label: "Открыть профиль", url: `${appUrl()}/t/${result.slug}?utm_source=telegram&utm_medium=bot&utm_campaign=connected` }
   );
   return result;
@@ -273,11 +273,17 @@ export async function dispatchDailyTelegramNotifications() {
     if (!claim[0]) continue;
     try {
       const events = await db()`
-        select id, track_title, artist_names, fetched_at
+        select id, track_title, artist_names, observed_at, fetched_at, raw_metadata
         from listening_events
         where tastemaker_id = ${subscription.tastemaker_id} and visibility = 'public' and publish_at <= now()
           and fetched_at > greatest(${subscription.subscribed_at}, coalesce(${subscription.last_notified_at}, ${subscription.subscribed_at}))
-        order by fetched_at desc, coalesce((raw_metadata->>'providerPosition')::int, 999999) asc
+        order by
+          coalesce(
+            observed_at,
+            case when coalesce(raw_metadata->>'observedDate', '') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then (raw_metadata->>'observedDate')::date::timestamptz end,
+            fetched_at
+          ) desc,
+          case when coalesce(raw_metadata->>'providerPosition', '') ~ '^[0-9]+$' then (raw_metadata->>'providerPosition')::int end asc nulls last
         limit 25
       `;
       if (!events.length) {
@@ -300,7 +306,7 @@ export async function dispatchDailyTelegramNotifications() {
       const trackedUrl = `${appUrl()}/go/telegram/${rawClickToken}`;
       const message = await sendMessage(
         String(subscription.chat_id),
-        `У <a href="${appUrl()}/t/${subscription.slug}?utm_source=telegram&utm_medium=notification&utm_campaign=daily_history"><b>${html(String(subscription.name))}</b></a> обновилась история прослушиваний.\n\nПоследний трек: <b>${html(String(newest.track_title))}</b>${firstArtists ? ` — ${html(firstArtists)}` : ""}.${more}\n\nЖивой плейлист уже обновлён.`,
+        `<a href="${appUrl()}/t/${subscription.slug}?utm_source=telegram&utm_medium=notification&utm_campaign=daily_history"><b>${html(String(subscription.name))}</b></a>: история прослушиваний обновилась.\n\nПоследний трек: <b>${html(String(newest.track_title))}</b>${firstArtists ? ` — ${html(firstArtists)}` : ""}.${more}\n\nЖивой плейлист уже обновлён.`,
         { label: "Открыть живой плейлист", url: trackedUrl }
       );
       await db().begin(async sql => {

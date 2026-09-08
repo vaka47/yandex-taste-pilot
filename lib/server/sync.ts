@@ -113,20 +113,32 @@ export async function syncTastemakerPlaylist(tastemakerId: string) {
   const maker = makerRows[0];
   if (!maker || maker.status !== "active" || !maker.publish_enabled) return { ok: true, skipped: true, reason: "paused" };
   const events = await db()`
-    select track_provider_id, album_provider_id, coalesce(observed_at, fetched_at) as ordering_time, raw_metadata
-    from listening_events
-    where tastemaker_id = ${tastemakerId} and visibility = 'public' and publish_at <= now() and album_provider_id is not null
-    order by coalesce(observed_at, fetched_at) desc, coalesce((raw_metadata->>'providerPosition')::int, 999999) asc
-    limit 500
+    with ordered as (
+      select track_provider_id, album_provider_id,
+        coalesce(
+          observed_at,
+          case when coalesce(raw_metadata->>'observedDate', '') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then (raw_metadata->>'observedDate')::date::timestamptz end,
+          fetched_at
+        ) as event_order,
+        case when coalesce(raw_metadata->>'providerPosition', '') ~ '^[0-9]+$' then (raw_metadata->>'providerPosition')::int end as provider_position
+      from listening_events
+      where tastemaker_id = ${tastemakerId} and visibility = 'public'
+        and publish_at <= now() and album_provider_id is not null
+    ), latest_by_track as (
+      select distinct on (track_provider_id)
+        track_provider_id, album_provider_id, event_order, provider_position
+      from ordered
+      order by track_provider_id, event_order desc, provider_position asc nulls last
+    )
+    select track_provider_id, album_provider_id
+    from latest_by_track
+    order by event_order desc, provider_position asc nulls last
+    limit ${Number(maker.max_tracks || 50)}
   `;
-  const seen = new Set<string>();
-  const desired: Array<{ trackId: string; albumId: string }> = [];
-  for (const event of events) {
-    if (seen.has(event.track_provider_id)) continue;
-    seen.add(event.track_provider_id);
-    desired.push({ trackId: event.track_provider_id, albumId: event.album_provider_id });
-    if (desired.length >= Number(maker.max_tracks || 50)) break;
-  }
+  const desired = events.map(event => ({
+    trackId: String(event.track_provider_id),
+    albumId: String(event.album_provider_id)
+  }));
   const logRows = await db()`insert into sync_logs (tastemaker_id, job_type, status, stats) values (${tastemakerId}, 'sync_live_playlist', 'running', ${db().json({ desired: desired.length })}) returning id`;
   try {
     const result = await connectorRequest<{ uid: string; kind: string; revision: number; trackCount: number; operations: number; publicUrl: string }>("/internal/yandex-music/playlist/sync", {

@@ -1197,3 +1197,43 @@ summary:active {
   .landingCarouselDots button { width: 14px; height: 3px; }
   .landingCarouselDots button.active { width: 24px; }
 }
+
+/* Final pilot hardening: readable 320px typography and full-size touch targets. */
+.brand { min-height: 44px; }
+.landingFooter nav a,
+.publicFooter nav a { min-height: 44px; display: inline-flex; align-items: center; }
+.landingCarouselDots { min-height: 44px; padding: 0 4px; gap: 0; }
+.landingCarouselDots button,
+.landingCarouselDots button.active {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  background: transparent;
+  display: grid;
+  place-items: center;
+}
+.landingCarouselDots button::before {
+  content: "";
+  width: 18px;
+  height: 4px;
+  border-radius: 4px;
+  background: rgba(255,255,255,.38);
+  transition: width var(--motion-standard) var(--ease-out), background var(--motion-standard) var(--ease-out);
+}
+.landingCarouselDots button.active::before { width: 30px; background: var(--sun); }
+
+@media (max-width: 640px) {
+  .textPage article { min-width: 0; overflow: hidden; }
+  .textPage h1 { max-width: 100%; font-size: clamp(38px,13.2vw,52px); letter-spacing: .018em; overflow-wrap: normal; word-break: normal; }
+  .landingCarouselDots { min-height: 44px; padding: 0 2px; }
+  .landingCarouselDots button,
+  .landingCarouselDots button.active { width: 44px; height: 44px; flex-basis: 44px; }
+  .landingCarouselDots button::before { width: 14px; height: 3px; }
+  .landingCarouselDots button.active::before { width: 24px; }
+}
+
+@media (max-width: 340px) {
+  .landingBottom > span { font-size: 38px; line-height: 1.04; }
+  .sectionHeader h2 { max-width: 100%; font-size: 40px; line-height: 1.02; text-wrap: balance; }
+}

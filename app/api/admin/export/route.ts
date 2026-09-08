@@ -35,8 +35,8 @@ export async function GET(request: NextRequest) {
     }));
   } else {
     const rawRows = tastemakerId
-      ? await db()`select date_trunc('day', a.created_at)::date as day, t.name, t.slug, a.event_name, count(*)::int as events, count(distinct coalesce(a.user_id::text, a.anonymous_id))::int as unique_people from analytics_events a join tastemakers t on t.id = a.tastemaker_id where a.tastemaker_id = ${tastemakerId} group by 1,2,3,4 order by 1 desc limit 50000`
-      : await db()`select date_trunc('day', a.created_at)::date as day, t.name, t.slug, a.event_name, count(*)::int as events, count(distinct coalesce(a.user_id::text, a.anonymous_id))::int as unique_people from analytics_events a left join tastemakers t on t.id = a.tastemaker_id group by 1,2,3,4 order by 1 desc limit 50000`;
+      ? await db()`select date_trunc('day', a.created_at)::date as day, t.name, t.slug, a.event_name, count(*)::int as events, count(distinct coalesce(a.user_id::text, a.anonymous_id))::int as unique_people from analytics_events a join tastemakers t on t.id = a.tastemaker_id where a.tastemaker_id = ${tastemakerId} and a.is_internal = false group by 1,2,3,4 order by 1 desc limit 50000`
+      : await db()`select date_trunc('day', a.created_at)::date as day, t.name, t.slug, a.event_name, count(*)::int as events, count(distinct coalesce(a.user_id::text, a.anonymous_id))::int as unique_people from analytics_events a left join tastemakers t on t.id = a.tastemaker_id where a.is_internal = false group by 1,2,3,4 order by 1 desc limit 50000`;
     rows = rawRows.map(row => ({
       "Дата": row.day, "Автор": row.name, "Адрес страницы": row.slug,
       "Событие": row.event_name, "Количество": row.events, "Уникальные посетители": row.unique_people
