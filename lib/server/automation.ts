@@ -26,16 +26,15 @@ export async function runAutomationCycle(sourceValue = "unknown"): Promise<Autom
   try {
     const ids = await connectedTastemakerIds();
     const results: Array<Record<string, unknown>> = [];
-    for (let offset = 0; offset < ids.length; offset += 3) {
-      const batch = ids.slice(offset, offset + 3);
-      const settled = await Promise.all(batch.map(async id => {
-        try {
-          return { id, ...(await syncTastemakerFully(id)) } as Record<string, unknown>;
-        } catch (error) {
-          return { id, ok: false, error: error instanceof Error ? error.message : "SYNC_FAILED" } as Record<string, unknown>;
-        }
-      }));
-      results.push(...settled);
+    // The pilot intentionally has only a handful of tastemakers. Polling their
+    // provider accounts sequentially avoids an unnecessary request burst and
+    // materially reduces transient Yandex Music rate limits.
+    for (const id of ids) {
+      try {
+        results.push({ id, ...(await syncTastemakerFully(id)) } as Record<string, unknown>);
+      } catch (error) {
+        results.push({ id, ok: false, error: error instanceof Error ? error.message : "SYNC_FAILED" } as Record<string, unknown>);
+      }
     }
     const succeeded = results.filter(result => result.ok === true).length;
     const failed = results.length - succeeded;

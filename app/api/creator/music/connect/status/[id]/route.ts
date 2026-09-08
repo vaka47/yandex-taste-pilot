@@ -32,7 +32,6 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
         where tastemaker_id = ${challenge.tastemaker_id}
       `;
       await sql`update tastemakers set status = 'active', is_public = true, publish_enabled = true, consent_version = 'pilot-1.0', consent_at = coalesce(consent_at, now()), updated_at = now() where id = ${challenge.tastemaker_id}`;
-      await sql`insert into sync_logs (tastemaker_id, job_type, status, stats) values (${challenge.tastemaker_id}, 'first_history_sync', 'queued', '{}'::jsonb)`;
     });
     await audit(creator.id, "connector_connected", "tastemaker", challenge.tastemaker_id, { providerAccountId: result.account?.id || null });
     await syncTastemakerFully(String(challenge.tastemaker_id), true);
