@@ -11,14 +11,18 @@ function signaturesMatch(supplied: string, expected: string) {
 }
 
 export async function POST(request: NextRequest) {
+  const contentLength = Number(request.headers.get("content-length") || 0);
+  if (contentLength > 128_000) return NextResponse.json({ error: "PAYLOAD_TOO_LARGE" }, { status: 413 });
   const expected = process.env.TELEGRAM_WEBHOOK_SECRET;
   const supplied = request.headers.get("x-telegram-bot-api-secret-token");
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const body = await request.text();
+  if (body.length > 128_000) return NextResponse.json({ error: "PAYLOAD_TOO_LARGE" }, { status: 413 });
   const relaySignature = request.headers.get("x-taste-relay-signature") || "";
   const expectedRelaySignature = token ? createHmac("sha256", token).update(body).digest("hex") : "";
   const relayed = Boolean(token && relaySignature && signaturesMatch(relaySignature, expectedRelaySignature));
-  if (!relayed && (!expected || supplied !== expected)) {
+  const direct = Boolean(expected && supplied && signaturesMatch(supplied, expected));
+  if (!relayed && !direct) {
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   }
 
