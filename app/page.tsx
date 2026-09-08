@@ -1,21 +1,15 @@
 import Link from "next/link";
-import { after } from "next/server";
 import { Brand } from "@/components/Brand";
 import { HomeDiscoveryClient } from "@/components/HomeDiscoveryClient";
 import { Icon } from "@/components/Icons";
 import { PublicHeader } from "@/components/PublicHeader";
-import { getFeaturedPublicProfile, getHomeDiscoveryData } from "@/lib/server/repository";
+import { getHomeDiscoveryData } from "@/lib/server/repository";
 import { getSessionUser } from "@/lib/server/session";
-import { syncTastemakerFully } from "@/lib/server/sync";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const [featured, discovery, session] = await Promise.all([getFeaturedPublicProfile(null), getHomeDiscoveryData(), getSessionUser()]);
-  if (featured && !featured.fixture && featured.status === "active" && featured.publishEnabled) {
-    const tastemakerId = featured.id;
-    after(() => syncTastemakerFully(tastemakerId).catch(() => undefined));
-  }
+  const [discovery, session] = await Promise.all([getHomeDiscoveryData(), getSessionUser()]);
   return (
     <main className="landingPage">
       <PublicHeader session={session} landing />

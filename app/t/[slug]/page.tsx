@@ -4,8 +4,6 @@ import { ProfileClient } from "@/components/ProfileClient";
 import { PublicHeader } from "@/components/PublicHeader";
 import { getPublicProfile } from "@/lib/server/repository";
 import { getSessionUser } from "@/lib/server/session";
-import { syncTastemakerFully } from "@/lib/server/sync";
-import { after } from "next/server";
 import { appUrl } from "@/lib/server/config";
 
 export const dynamic = "force-dynamic";
@@ -42,10 +40,6 @@ export default async function TastemakerPage({ params }: { params: Promise<{ slu
     if (renamedProfile) redirect("/t/safonov-ivan");
   }
   if (!profile) notFound();
-  if (!profile.fixture && profile.status === "active" && profile.publishEnabled) {
-    const tastemakerId = profile.id;
-    after(() => syncTastemakerFully(tastemakerId).catch(() => undefined));
-  }
   return (
     <div className="publicShell">
       <PublicHeader session={session} />
