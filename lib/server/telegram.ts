@@ -3,6 +3,7 @@ import { createHmac } from "node:crypto";
 import { appUrl, telegramNotificationsConfigured } from "@/lib/server/config";
 import { hashToken, randomToken } from "@/lib/server/crypto";
 import { db, ensureSchema } from "@/lib/server/db";
+import { yandexMusicDestination } from "@/lib/server/security";
 
 type TelegramUser = { id: number; username?: string; first_name?: string };
 type TelegramMessage = { message_id: number; text?: string; chat: { id: number; type: string }; from?: TelegramUser };
@@ -50,6 +51,12 @@ async function sendMessage(chatId: string, text: string, button?: { label: strin
     disable_web_page_preview: true,
     ...(button ? { reply_markup: { inline_keyboard: [[{ text: button.label, url: button.url }]] } } : {})
   });
+}
+
+function directYandexMusicUrl(value: unknown) {
+  const destination = yandexMusicDestination(String(value ?? ""));
+  if (!destination) throw new Error("DESTINATION_NOT_ALLOWED");
+  return destination.toString();
 }
 
 function moscowMinuteOfDay(now = new Date()) {
@@ -295,19 +302,23 @@ export async function dispatchDailyTelegramNotifications() {
         await db()`update telegram_subscriptions set notification_locked_until = null, updated_at = now() where id = ${subscription.id}`;
         continue;
       }
-      const rawClickToken = randomToken(24);
+      // The nonce keeps every delivery row unique. It is deliberately not used
+      // as an intermediate URL: a nitca.ru redirect makes Telegram open its own
+      // browser first and prevents Yandex Music Universal/App Links from taking
+      // the listener straight to the exact playlist in the installed app.
+      const deliveryNonce = randomToken(24);
       const deliveries = await db()`
         insert into telegram_deliveries (subscription_id, user_id, tastemaker_id, click_token_hash, event_count, delivery_type)
-        values (${subscription.id}, ${subscription.user_id}, ${subscription.tastemaker_id}, ${hashToken(rawClickToken)}, ${events.length}, 'history_digest')
+        values (${subscription.id}, ${subscription.user_id}, ${subscription.tastemaker_id}, ${hashToken(deliveryNonce)}, ${events.length}, 'history_digest')
         returning id
       `;
       const firstArtists = Array.isArray(newest.artist_names) ? newest.artist_names.map(String).join(", ") : "";
       const more = events.length > 1 ? `\nИ ещё ${events.length - 1}.` : "";
-      const trackedUrl = `${appUrl()}/go/telegram/${rawClickToken}`;
+      const playlistUrl = directYandexMusicUrl(subscription.public_url);
       const message = await sendMessage(
         String(subscription.chat_id),
         `<a href="${appUrl()}/t/${subscription.slug}?utm_source=telegram&utm_medium=notification&utm_campaign=daily_history"><b>${html(String(subscription.name))}</b></a>: история прослушиваний обновилась.\n\nПоследний трек: <b>${html(String(newest.track_title))}</b>${firstArtists ? ` — ${html(firstArtists)}` : ""}.${more}\n\nЖивой плейлист уже обновлён.`,
-        { label: "Открыть живой плейлист", url: trackedUrl }
+        { label: "Открыть живой плейлист", url: playlistUrl }
       );
       await db().begin(async sql => {
         await sql`update telegram_deliveries set status = 'sent', telegram_message_id = ${String(message.message_id)}, sent_at = now() where id = ${deliveries[0].id}`;
@@ -342,7 +353,7 @@ export async function dispatchCreatorCommentNotifications(commentId?: string) {
   `;
   const subscriptions = await db()`
     select ts.id as subscription_id, ts.user_id, ts.tastemaker_id, ta.chat_id,
-      ec.id as comment_id, ec.body, e.id as event_id, e.track_title, e.artist_names,
+      ec.id as comment_id, ec.body, e.id as event_id, e.track_title, e.artist_names, e.yandex_url,
       t.name, t.slug
     from event_comments ec
     join listening_events e on e.id = ec.listening_event_id and e.visibility = 'public' and e.publish_at <= now()
@@ -361,14 +372,14 @@ export async function dispatchCreatorCommentNotifications(commentId?: string) {
   let sent = 0;
   let failed = 0;
   for (const subscription of subscriptions) {
-    const rawClickToken = randomToken(24);
+    const deliveryNonce = randomToken(24);
     const deliveries = await db()`
       insert into telegram_deliveries (
         subscription_id, user_id, tastemaker_id, click_token_hash, event_count,
         delivery_type, listening_event_id, comment_id
       ) values (
         ${subscription.subscription_id}, ${subscription.user_id}, ${subscription.tastemaker_id},
-        ${hashToken(rawClickToken)}, 1, 'creator_comment', ${subscription.event_id}, ${subscription.comment_id}
+        ${hashToken(deliveryNonce)}, 1, 'creator_comment', ${subscription.event_id}, ${subscription.comment_id}
       )
       on conflict do nothing
       returning id
@@ -376,10 +387,11 @@ export async function dispatchCreatorCommentNotifications(commentId?: string) {
     if (!deliveries[0]) continue;
     try {
       const artists = Array.isArray(subscription.artist_names) ? subscription.artist_names.map(String).join(", ") : "";
+      const trackUrl = directYandexMusicUrl(subscription.yandex_url);
       const message = await sendMessage(
         String(subscription.chat_id),
         `<a href="${appUrl()}/t/${subscription.slug}?utm_source=telegram&utm_medium=notification&utm_campaign=creator_comment"><b>${html(String(subscription.name))}</b></a> — новый комментарий к треку <b>${html(String(subscription.track_title))}</b>${artists ? ` — ${html(artists)}` : ""}.\n\n«${html(String(subscription.body))}»`,
-        { label: "Открыть трек", url: `${appUrl()}/go/telegram/${rawClickToken}` }
+        { label: "Открыть трек", url: trackUrl }
       );
       await db()`update telegram_deliveries set status = 'sent', telegram_message_id = ${String(message.message_id)}, sent_at = now() where id = ${deliveries[0].id}`;
       sent += 1;
