@@ -23,8 +23,11 @@ export function ProfileClient({ initialProfile, session }: { initialProfile: Tas
   const searchParams = useSearchParams();
   const [profile, setProfile] = useState(initialProfile);
   const [authOpen, setAuthOpen] = useState(false);
-  const [authIntent, setAuthIntent] = useState<"follow" | "telegram">("follow");
-  const [playlistPromptOpen, setPlaylistPromptOpen] = useState(searchParams.get("follow") === "completed" && searchParams.get("telegram") !== "connect" && !profile.telegram.subscribed);
+  const [authIntent, setAuthIntent] = useState<"follow" | "telegram" | "playlist">("follow");
+  const playlistRequestedAfterLogin = Boolean(session) && searchParams.get("playlist") === "open";
+  const [playlistPromptOpen, setPlaylistPromptOpen] = useState(
+    playlistRequestedAfterLogin || (searchParams.get("follow") === "completed" && searchParams.get("telegram") !== "connect" && !profile.telegram.subscribed)
+  );
   const [unfollowConfirmOpen, setUnfollowConfirmOpen] = useState(false);
   const [toast, setToast] = useState<{ tone: "success" | "error" | "neutral"; text: string } | null>(null);
   const [mobileActionVisible, setMobileActionVisible] = useState(false);
@@ -127,6 +130,11 @@ export function ProfileClient({ initialProfile, session }: { initialProfile: Tas
     setToast(ok ? { tone: "neutral", text: "Подписка отменена." } : { tone: "error", text: "Не удалось отменить подписку. Попробуйте ещё раз." });
   }
 
+  function requestPlaylist() {
+    setAuthIntent("playlist");
+    setAuthOpen(true);
+  }
+
   async function share() {
     trackEvent("share_click", { tastemakerId: profile.id });
     const profileUrl = `${window.location.origin}/t/${profile.slug}`;
@@ -220,8 +228,14 @@ export function ProfileClient({ initialProfile, session }: { initialProfile: Tas
     setToast({ tone: "neutral", text: `Уведомления отключены: ${profile.name}.` });
   }
 
-  const authReturnTo = authIntent === "telegram" ? `/t/${profile.slug}?telegram=connect` : `/t/${profile.slug}`;
-  const authHref = `/auth/yandex/start?returnTo=${encodeURIComponent(authReturnTo)}&follow=${encodeURIComponent(profile.id)}`;
+  const authReturnTo = authIntent === "telegram"
+    ? `/t/${profile.slug}?telegram=connect`
+    : authIntent === "playlist"
+      ? `/t/${profile.slug}?playlist=open`
+      : `/t/${profile.slug}`;
+  const authHref = authIntent === "playlist"
+    ? `/auth/yandex/start?returnTo=${encodeURIComponent(authReturnTo)}&tastemaker=${encodeURIComponent(profile.id)}`
+    : `/auth/yandex/start?returnTo=${encodeURIComponent(authReturnTo)}&follow=${encodeURIComponent(profile.id)}`;
   const unlockHref = `/auth/yandex/start?returnTo=${encodeURIComponent(`/t/${profile.slug}`)}&tastemaker=${encodeURIComponent(profile.id)}`;
 
   return (
@@ -244,6 +258,7 @@ export function ProfileClient({ initialProfile, session }: { initialProfile: Tas
             {profile.bio ? <p>{profile.bio}</p> : null}
             <div className={`heroActions ${!session ? "anonymousActions" : ""}`}>
               <button ref={primaryFollowRef} className={`primaryAction ${profile.viewerFollows ? "isFollowing" : ""}`} type="button" onClick={() => void follow()}><Icon name={profile.viewerFollows ? "check" : "pulse"} />{profile.viewerFollows ? "Вы подписаны" : "Подписаться"}</button>
+              {!session && profile.playlistUrl ? <button className="playlistAction guestPlaylistAction" type="button" onClick={requestPlaylist}><Icon name="playlist" />Открыть плейлист<Icon name="arrow" size={17} /></button> : null}
               {session && profile.playlistUrl ? <a className="playlistAction" href={`/go/playlist/${profile.id}`} target="_blank" rel="noreferrer"><Icon name="playlist" /> Плейлист в Яндекс Музыке <Icon name="arrow" size={17} /></a> : null}
               {!telegramState.subscribed ? <button className="heroTelegramAction" type="button" disabled={telegramBusy || !telegramState.available} onClick={() => void connectTelegram()}><span className="telegramActionLabel"><Icon name="send" /><span>{telegramBusy ? "Подключаем Telegram…" : "Получать обновления в Telegram"}</span></span><Icon name="arrow" size={17} /></button> : null}
             </div>
@@ -296,11 +311,11 @@ export function ProfileClient({ initialProfile, session }: { initialProfile: Tas
 
       {mobileActionVisible && !footerVisible ? <div className={`mobileActions ${session && profile.playlistUrl ? "withPlaylist" : "single"}`}><button type="button" onClick={() => void follow()}><Icon name={profile.viewerFollows ? "check" : "pulse"} />{profile.viewerFollows ? "Вы подписаны" : "Подписаться"}</button>{session && profile.playlistUrl ? <a href={`/go/playlist/${profile.id}`} target="_blank" rel="noreferrer"><Icon name="playlist" />Плейлист</a> : null}</div> : null}
 
-      {playlistPromptOpen ? <div className="modalBackdrop" role="presentation" onMouseDown={event => { if (event.currentTarget === event.target) setPlaylistPromptOpen(false); }}><section className="authModal playlistPrompt" role="dialog" aria-modal="true" aria-labelledby="playlist-prompt-title"><button className="modalClose" type="button" onClick={() => setPlaylistPromptOpen(false)} aria-label="Закрыть"><Icon name="x" /></button><div className="playlistPromptStatus"><span className="modalSignal"><i /><i /><i /></span><small>подписка оформлена</small></div><h2 id="playlist-prompt-title">Откройте историю прослушиваний вашего Саундмейкера в Яндекс Музыке</h2><p>Когда ваш кумир слушает новый трек, он автоматически появляется по этой постоянной ссылке. Нажмите на сердце в Яндекс Музыке, чтобы сохранить плейлист и не потерять его.{!telegramState.subscribed ? " Подключите Telegram, чтобы не пропустить новую музыку, которую сегодня послушал ваш Саундмейкер." : ""}</p>{profile.playlistUrl ? <a className="yandexLogin" href={`/go/playlist/${profile.id}?source=follow_success`} target="_blank" rel="noreferrer" onClick={() => setPlaylistPromptOpen(false)}><span>Я</span>Открыть в Яндекс Музыке<Icon name="arrow" /></a> : <button className="yandexLogin playlistPreparing" type="button" disabled><span>Я</span>Плейлист создаётся<Icon name="clock" /></button>}{!telegramState.subscribed ? <button className="telegramPromptAction" type="button" disabled={!telegramState.available || telegramBusy} onClick={() => void connectTelegram()}><Icon name="send" />{telegramBusy ? "Подключаем…" : telegramState.available ? "Получать обновления в Telegram" : "Telegram скоро подключим"}</button> : null}<button className="playlistPromptLater" type="button" onClick={() => setPlaylistPromptOpen(false)}>Вернуться в Taste</button></section></div> : null}
+      {playlistPromptOpen ? <div className="modalBackdrop" role="presentation" onMouseDown={event => { if (event.currentTarget === event.target) setPlaylistPromptOpen(false); }}><section className="authModal playlistPrompt" role="dialog" aria-modal="true" aria-labelledby="playlist-prompt-title"><button className="modalClose" type="button" onClick={() => setPlaylistPromptOpen(false)} aria-label="Закрыть"><Icon name="x" /></button><div className="playlistPromptStatus"><span className="modalSignal"><i /><i /><i /></span><small>{playlistRequestedAfterLogin ? "вход выполнен" : "подписка оформлена"}</small></div><h2 id="playlist-prompt-title">{playlistRequestedAfterLogin ? "Живой плейлист готов" : "Откройте историю прослушиваний вашего Саундмейкера в Яндекс Музыке"}</h2><p>{playlistRequestedAfterLogin ? `Откройте плейлист «Что слушает ${profile.name}» в Яндекс Музыке. Нажмите на сердце, чтобы сохранить эту постоянную ссылку.` : <>Когда ваш кумир слушает новый трек, он автоматически появляется по этой постоянной ссылке. Нажмите на сердце в Яндекс Музыке, чтобы сохранить плейлист и не потерять его.{!telegramState.subscribed ? " Подключите Telegram, чтобы не пропустить новую музыку, которую сегодня послушал ваш Саундмейкер." : ""}</>}</p>{profile.playlistUrl ? <a className="yandexLogin" href={`/go/playlist/${profile.id}?source=${playlistRequestedAfterLogin ? "guest_playlist" : "follow_success"}`} target="_blank" rel="noreferrer" onClick={() => setPlaylistPromptOpen(false)}><span>Я</span>Открыть в Яндекс Музыке<Icon name="arrow" /></a> : <button className="yandexLogin playlistPreparing" type="button" disabled><span>Я</span>Плейлист создаётся<Icon name="clock" /></button>}{!playlistRequestedAfterLogin && !telegramState.subscribed ? <button className="telegramPromptAction" type="button" disabled={!telegramState.available || telegramBusy} onClick={() => void connectTelegram()}><Icon name="send" />{telegramBusy ? "Подключаем…" : telegramState.available ? "Получать обновления в Telegram" : "Telegram скоро подключим"}</button> : null}<button className="playlistPromptLater" type="button" onClick={() => setPlaylistPromptOpen(false)}>Вернуться в Taste</button></section></div> : null}
 
       {unfollowConfirmOpen ? <div className="modalBackdrop" role="presentation" onMouseDown={event => { if (event.currentTarget === event.target) setUnfollowConfirmOpen(false); }}><section className="authModal unfollowConfirm" role="alertdialog" aria-modal="true" aria-labelledby="unfollow-title"><button className="modalClose" type="button" onClick={() => setUnfollowConfirmOpen(false)} aria-label="Закрыть"><Icon name="x" /></button><span className="confirmModalIcon"><Icon name="pulse" /></span><h2 id="unfollow-title">Отменить подписку: {profile.name}?</h2><p>История исчезнет из ваших подписок, а Telegram-уведомления этого Саундмейкера отключатся.</p><div><button type="button" className="playlistPromptLater" onClick={() => setUnfollowConfirmOpen(false)}>Остаться</button><button type="button" className="dangerButton" onClick={() => void confirmUnfollow()}>Отписаться</button></div></section></div> : null}
 
-      {authOpen ? <div className="modalBackdrop" role="presentation" onMouseDown={event => { if (event.currentTarget === event.target) setAuthOpen(false); }}><section className="authModal" role="dialog" aria-modal="true" aria-labelledby="auth-title"><button className="modalClose" type="button" onClick={() => setAuthOpen(false)} aria-label="Закрыть"><Icon name="x" /></button><span className="modalSignal"><i /><i /><i /></span><small>без доступа к вашей музыке</small><h2 id="auth-title">{authIntent === "telegram" ? `Подключить уведомления · ${profile.name}` : `Оформить подписку · ${profile.name}`}</h2><p>Яндекс ID нужен только для вашей учётной записи Taste. После входа подписка оформится автоматически.</p><Link className="yandexLogin" href={authHref} prefetch={false}><span>Я</span>Продолжить с Яндекс ID<Icon name="arrow" /></Link></section></div> : null}
+      {authOpen ? <div className="modalBackdrop" role="presentation" onMouseDown={event => { if (event.currentTarget === event.target) setAuthOpen(false); }}><section className="authModal" role="dialog" aria-modal="true" aria-labelledby="auth-title"><button className="modalClose" type="button" onClick={() => setAuthOpen(false)} aria-label="Закрыть"><Icon name="x" /></button><span className="modalSignal"><i /><i /><i /></span><small>без доступа к вашей музыке</small><h2 id="auth-title">{authIntent === "telegram" ? `Подключить уведомления · ${profile.name}` : authIntent === "playlist" ? `Открыть плейлист · ${profile.name}` : `Оформить подписку · ${profile.name}`}</h2><p>{authIntent === "playlist" ? "Войдите через Яндекс ID — после входа мы вернём вас к готовому плейлисту. Taste не получает доступ к вашей музыке." : "Яндекс ID нужен только для вашей учётной записи Taste. После входа подписка оформится автоматически."}</p><Link className="yandexLogin" href={authHref} prefetch={false}><span>Я</span>Продолжить с Яндекс ID<Icon name="arrow" /></Link></section></div> : null}
 
       {toast ? <div className={`toast ${toast.tone}`} role={toast.tone === "error" ? "alert" : "status"}><Icon name={toast.tone === "error" ? "shield" : toast.tone === "success" ? "check" : "pulse"} />{toast.text}</div> : null}
     </>

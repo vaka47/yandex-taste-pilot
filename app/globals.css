@@ -846,6 +846,10 @@ summary:active {
 .eventListScrollable:focus-visible { outline-offset: 5px; }
 
 @media (min-width: 981px) {
+  .profileHero { min-height: 0; align-items: center; }
+  .profileHero .portraitStage { width: 100%; min-height: 0; aspect-ratio: 1; align-self: center; }
+  .profileHero .profilePortrait { height: 100%; min-height: 0; aspect-ratio: 1; }
+  .profileHero .heroCopy { align-self: stretch; }
   .firstSeenSection .sectionHeader { grid-template-columns: minmax(0,1fr); }
   .firstSeenSection .sectionHeader h2 { max-width: none; white-space: nowrap; font-size: clamp(42px,4.4vw,68px); letter-spacing: .015em; }
 }
@@ -862,7 +866,10 @@ summary:active {
 .landingFlow h2 > span { color: var(--signal); }
 
 .heroActions.anonymousActions { grid-template-columns: minmax(180px, .9fr) minmax(300px, 1.45fr); }
-.heroActions.anonymousActions .heroTelegramAction { grid-column: 2; }
+.heroActions.anonymousActions .primaryAction { grid-column: 1; grid-row: 1; }
+.heroActions.anonymousActions .heroTelegramAction { grid-column: 2; grid-row: 1; }
+.heroActions.anonymousActions .guestPlaylistAction { grid-column: 1 / -1; grid-row: 2; }
+.guestPlaylistAction svg:last-child { margin-left: auto; }
 .heroTelegramAction { position: relative; display: flex; justify-content: center; padding-right: 46px; padding-left: 46px; }
 .heroTelegramAction .telegramActionLabel { min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: 9px; text-align: center; line-height: 1.25; }
 .heroTelegramAction .telegramActionLabel > svg { flex: 0 0 auto; }
@@ -950,7 +957,9 @@ summary:active {
   .landingFlow { padding-top: 58px; }
   .heroActions.anonymousActions { grid-template-columns: minmax(112px,.8fr) minmax(0,1.55fr); }
   .heroActions.anonymousActions > * { grid-column: auto; min-width: 0; }
-  .heroActions.anonymousActions .heroTelegramAction { grid-column: 2; padding: 0 11px; font-size: 10px; }
+  .heroActions.anonymousActions .primaryAction { grid-column: 1; grid-row: 1; }
+  .heroActions.anonymousActions .heroTelegramAction { grid-column: 2; grid-row: 1; padding: 0 11px; font-size: 10px; }
+  .heroActions.anonymousActions .guestPlaylistAction { grid-column: 1 / -1; grid-row: 2; }
   .heroTelegramAction { padding-right: 34px !important; padding-left: 34px !important; gap: 7px; }
   .heroTelegramAction .telegramActionLabel { gap: 7px; }
   .heroTelegramAction svg:last-child { right: 10px; }
