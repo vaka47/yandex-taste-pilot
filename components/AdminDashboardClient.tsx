@@ -9,6 +9,7 @@ import type { TastemakerGender } from "@/types/domain";
 type Notice = { tone: "success" | "warning"; text: string } | null;
 type NewTastemaker = { name: string; slug: string; roleLine: string; gender: TastemakerGender };
 type Challenge = { id: string; userCode: string; verificationUrl: string; expiresAt: string; interval: number };
+type InviteLink = { url: string; soundmakerName: string; replaced: boolean };
 
 const statusLabels: Record<string, string> = {
   draft: "черновик", invited: "приглашён", connected: "подключён", active: "активен", paused: "на паузе", disconnected: "отключён", archived: "в архиве"
@@ -35,7 +36,8 @@ export function AdminDashboardClient({ initialData }: { initialData: AdminDashbo
   const [notice, setNotice] = useState<Notice>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [inviteLink, setInviteLink] = useState<InviteLink | null>(null);
+  const [inviteCopyState, setInviteCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [draftMaker, setDraftMaker] = useState<NewTastemaker>({ name: "", slug: "", roleLine: "", gender: "neutral" });
   const [serviceConnectOpen, setServiceConnectOpen] = useState(false);
   const [serviceChallenge, setServiceChallenge] = useState<Challenge | null>(null);
@@ -84,12 +86,44 @@ export function AdminDashboardClient({ initialData }: { initialData: AdminDashbo
     setServiceState("waiting");
   }
 
+  async function copyInviteLink() {
+    if (!inviteLink) return;
+    let copied = false;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(inviteLink.url);
+        copied = true;
+      }
+    } catch {
+      copied = false;
+    }
+    if (!copied) {
+      const field = document.createElement("textarea");
+      try {
+        field.value = inviteLink.url;
+        field.setAttribute("readonly", "");
+        field.style.position = "fixed";
+        field.style.opacity = "0";
+        document.body.appendChild(field);
+        field.focus();
+        field.select();
+        copied = document.execCommand("copy");
+      } catch {
+        copied = false;
+      } finally {
+        field.remove();
+      }
+    }
+    setInviteCopyState(copied ? "copied" : "failed");
+  }
+
   async function action(type: string, tastemakerId?: string, payload: Partial<NewTastemaker> & { confirmName?: string } = {}) {
     setBusy(`${type}:${tastemakerId || "global"}`);
     const response = await fetch("/api/admin/action", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ type, tastemakerId, ...payload }) });
     const result = await response.json().catch(() => ({})) as { id?: string; slug?: string; inviteUrl?: string; roleLine?: string; error?: string };
     setBusy(null);
     if (response.ok && result.inviteUrl) {
+      const soundmakerName = payload.name?.trim() || tastemakers.find(item => item.id === tastemakerId)?.name || "Саундмейкера";
       if (type === "create_tastemaker" && result.id) {
         const roleLine = payload.roleLine?.trim() || "Саундмейкер";
         setTastemakers(items => [{ id: result.id!, slug: result.slug || payload.slug || "new-soundmaker", name: payload.name || "Новый Саундмейкер", gender: payload.gender || "neutral", roleLine, avatarUrl: null, status: "invited", registered: false, followerCount: 0, profileViews7d: 0, uniqueVisitors7d: 0, historyUnlocks7d: 0, authCompletions7d: 0, followClicks7d: 0, follows7d: 0, trackOpens7d: 0, playlistOpens7d: 0, shares7d: 0, telegramSubscribers: 0, telegramClicks7d: 0, returnVisitors7d: 0, d1Retention: 0, d7Retention: 0, followerD7Retention: 0, lastSyncAt: null, playlistUrl: null, playlistStatus: "not_created", connectionStatus: "not_connected", playlistError: null, connectionError: null }, ...items]);
@@ -97,9 +131,9 @@ export function AdminDashboardClient({ initialData }: { initialData: AdminDashbo
         setInviteOpen(false);
         setDraftMaker({ name: "", slug: "", roleLine: "", gender: "neutral" });
       }
-      setInviteLink(result.inviteUrl);
-      await navigator.clipboard?.writeText(result.inviteUrl).catch(() => undefined);
-      setNotice({ tone: "success", text: "Одноразовая ссылка скопирована. После первой регистрации она сгорит." });
+      setInviteLink({ url: result.inviteUrl, soundmakerName, replaced: type === "create_invite" });
+      setInviteCopyState("idle");
+      setNotice(null);
       return;
     }
     if (response.ok && type === "update_tastemaker_intro" && tastemakerId) {
@@ -124,7 +158,15 @@ export function AdminDashboardClient({ initialData }: { initialData: AdminDashbo
   return (
     <>
       <header className="workspaceTopbar"><div><span>кабинет владельца · последние 7 дней</span><h1>Саундмейкеры Taste</h1></div><div><a className="ghostButton" href="/api/admin/export?kind=daily"><Icon name="arrow" />Выгрузить аналитику</a><button type="button" className="darkButton" onClick={() => setInviteOpen(true)}><Icon name="users" />Пригласить Саундмейкера</button></div></header>
-      {notice ? <div className={`workspaceNotice ${notice.tone}`} role="status"><Icon name={notice.tone === "success" ? "check" : "shield"} /><span>{notice.text}{inviteLink ? <> <a href={inviteLink} target="_blank" rel="noreferrer">Открыть ссылку</a></> : null}</span><button type="button" onClick={() => { setNotice(null); setInviteLink(null); }} aria-label="Закрыть"><Icon name="x" size={17} /></button></div> : null}
+      {notice ? <div className={`workspaceNotice ${notice.tone}`} role="status"><Icon name={notice.tone === "success" ? "check" : "shield"} /><span>{notice.text}</span><button type="button" onClick={() => setNotice(null)} aria-label="Закрыть"><Icon name="x" size={17} /></button></div> : null}
+      {inviteLink ? <section className="inviteReadyPanel" role="status" aria-live="polite">
+        <span className="inviteReadyIcon"><Icon name="check" size={22} /></span>
+        <div className="inviteReadyCopy"><span>приглашение готово</span><strong>Ссылка для {inviteLink.soundmakerName}</strong><p>{inviteLink.replaced ? "Создана новая ссылка. Предыдущая больше не действует." : "Ссылка действует 7 дней и сгорит после регистрации."}</p></div>
+        <label className="inviteReadyField"><span>Ссылка приглашения</span><input readOnly value={inviteLink.url} onFocus={event => event.currentTarget.select()} /></label>
+        <div className="inviteReadyActions"><button type="button" className={inviteCopyState === "copied" ? "isCopied" : ""} onClick={() => void copyInviteLink()}><Icon name={inviteCopyState === "copied" ? "check" : "copy"} />{inviteCopyState === "copied" ? "Скопировано" : "Скопировать ссылку"}</button><a href={inviteLink.url} target="_blank" rel="noreferrer">Проверить <Icon name="arrow" /></a></div>
+        {inviteCopyState === "failed" ? <small>Автокопирование запрещено браузером. Нажмите на адрес выше и скопируйте его вручную.</small> : null}
+        <button type="button" className="inviteReadyClose" onClick={() => { setInviteLink(null); setInviteCopyState("idle"); }} aria-label="Закрыть"><Icon name="x" size={18} /></button>
+      </section> : null}
 
       <section className="metricStrip" aria-label="Общие показатели">
         <article><span>активные Саундмейкеры</span><strong>{activeCount} <small>/ {tastemakers.length}</small></strong><em>{connectedCount} подключили историю</em></article>
@@ -155,7 +197,7 @@ export function AdminDashboardClient({ initialData }: { initialData: AdminDashbo
             <div className="makerAnalytics"><div><span>Все просмотры страницы</span><strong>{fullNumber(item.profileViews7d)}</strong></div><div><span>Вернулись в другой день</span><strong>{fullNumber(item.returnVisitors7d)}</strong><small>{percent(item.returnVisitors7d, item.uniqueVisitors7d)} от посетителей</small></div><div><span>Удержание D1</span><strong>{item.d1Retention}%</strong><small>вернулись на следующий день</small></div><div><span>Удержание D7</span><strong>{item.d7Retention}%</strong><small>подписчики: {item.followerD7Retention}%</small></div><div><span>Открыли трек</span><strong>{fullNumber(item.trackOpens7d)}</strong></div><div><span>Открыли плейлист</span><strong>{fullNumber(item.playlistOpens7d)}</strong></div><div><span>Перешли из Telegram</span><strong>{fullNumber(item.telegramClicks7d)}</strong></div><div><span>Поделились страницей</span><strong>{fullNumber(item.shares7d)}</strong></div></div>
             {item.registered && item.connectionStatus !== "connected" ? <div className="makerRecovery"><Icon name="shield" /><div><strong>Регистрация завершена, музыка ещё не подключена</strong><span>Попросите Саундмейкера войти в кабинет под тем же Яндекс ID и нажать «Подключить».</span></div><a href="/creator" target="_blank" rel="noreferrer">Открыть путь подключения <Icon name="arrow" /></a></div> : null}
             {item.connectionStatus === "connected" && item.playlistStatus === "error" ? <div className="makerRecovery playlistRecovery"><Icon name="playlist" /><div><strong>История работает, плейлист требует восстановления</strong><span>Новые прослушивания сохранены. Код состояния: {item.playlistError || "ошибка синхронизации"}. Запустите обновление ниже.</span></div></div> : null}
-            <footer><div><span>История: <b>{connectionLabels[item.connectionStatus]}</b></span><span>Плейлист: <b>{playlistLabels[item.playlistStatus]}</b></span><span>Обновление: <b>{item.lastSyncAt ? relativeTime(item.lastSyncAt) : "ещё не было"}</b></span></div><nav>{item.connectionStatus === "connected" && ["active", "paused"].includes(item.status) ? <a href={`/t/${item.slug}`} target="_blank" rel="noreferrer"><Icon name="eye" />Открыть страницу</a> : <span className="adminPagePending"><Icon name="lock" />Страница после подключения</span>}{item.avatarUrl ? <a href={`/api/admin/avatar/${item.id}`}><Icon name="arrow" />Скачать аватарку</a> : null}<a href={`/api/admin/export?kind=daily&tastemakerId=${item.id}`}><Icon name="arrow" />Выгрузить данные</a>{item.connectionStatus === "connected" ? <button type="button" disabled={busy === `sync:${item.id}`} onClick={() => void action("sync", item.id)}><Icon name="sync" />{busy === `sync:${item.id}` ? "Обновляем…" : "Обновить сейчас"}</button> : null}{!item.registered ? <button type="button" disabled={busy === `create_invite:${item.id}`} onClick={() => void action("create_invite", item.id)}><Icon name="copy" />Новая ссылка</button> : null}{["active", "paused"].includes(item.status) ? <button type="button" disabled={busy === `pause:${item.id}`} onClick={() => void action("pause", item.id)}><Icon name={item.status === "paused" ? "play" : "pause"} />{item.status === "paused" ? "Возобновить" : "На паузу"}</button> : null}<button type="button" className="dangerTextButton" onClick={() => { setPendingDelete(item); setDeleteConfirmation(""); }}><Icon name="x" />Удалить Саундмейкера</button></nav></footer>
+            <footer><div><span>История: <b>{connectionLabels[item.connectionStatus]}</b></span><span>Плейлист: <b>{playlistLabels[item.playlistStatus]}</b></span><span>Обновление: <b>{item.lastSyncAt ? relativeTime(item.lastSyncAt) : "ещё не было"}</b></span></div><nav>{item.connectionStatus === "connected" && ["active", "paused"].includes(item.status) ? <a href={`/t/${item.slug}`} target="_blank" rel="noreferrer"><Icon name="eye" />Открыть страницу</a> : <span className="adminPagePending"><Icon name="lock" />Страница после подключения</span>}{item.avatarUrl ? <a href={`/api/admin/avatar/${item.id}`}><Icon name="arrow" />Скачать аватарку</a> : null}<a href={`/api/admin/export?kind=daily&tastemakerId=${item.id}`}><Icon name="arrow" />Выгрузить данные</a>{item.connectionStatus === "connected" ? <button type="button" disabled={busy === `sync:${item.id}`} onClick={() => void action("sync", item.id)}><Icon name="sync" />{busy === `sync:${item.id}` ? "Обновляем…" : "Обновить сейчас"}</button> : null}{!item.registered ? <button type="button" disabled={busy === `create_invite:${item.id}`} title="Создать новую ссылку вместо предыдущей" onClick={() => void action("create_invite", item.id)}><Icon name="copy" />{busy === `create_invite:${item.id}` ? "Готовим ссылку…" : "Получить ссылку снова"}</button> : null}{["active", "paused"].includes(item.status) ? <button type="button" disabled={busy === `pause:${item.id}`} onClick={() => void action("pause", item.id)}><Icon name={item.status === "paused" ? "play" : "pause"} />{item.status === "paused" ? "Возобновить" : "На паузу"}</button> : null}<button type="button" className="dangerTextButton" onClick={() => { setPendingDelete(item); setDeleteConfirmation(""); }}><Icon name="x" />Удалить Саундмейкера</button></nav></footer>
           </details>;
         })}{!filteredTastemakers.length ? <div className="adminSearchEmpty"><Icon name="search" /><strong>Ничего не найдено</strong><span>Проверьте имя или адрес страницы.</span></div> : null}</div>
       </section>
@@ -167,7 +209,7 @@ export function AdminDashboardClient({ initialData }: { initialData: AdminDashbo
 
       <section className="adminPanel auditPanel"><header><div><span>журнал изменений</span><h2>Последние операции</h2></div></header><div className="auditRows">{initialData.recentAudits.length ? initialData.recentAudits.slice(0, 6).map(item => <div key={item.id}><span className="auditIcon success"><Icon name="check" /></span><div><strong>{auditLabel(item.action)}</strong><small>{item.entityName || "системная операция"}</small></div><time>{relativeTime(item.createdAt)}</time><em>записано</em></div>) : <div><span className="auditIcon"><Icon name="clock" /></span><div><strong>Операций пока нет</strong><small>Журнал заполнится после первых действий.</small></div><time>—</time><em>готов</em></div>}</div></section>
 
-      {inviteOpen ? <div className="modalBackdrop" role="presentation" onMouseDown={event => { if (event.currentTarget === event.target) setInviteOpen(false); }}><section className="workspaceModal"><button type="button" onClick={() => setInviteOpen(false)} aria-label="Закрыть"><Icon name="x" /></button><span>новый Саундмейкер</span><h2>Пригласить Саундмейкера</h2><label>Имя<input value={draftMaker.name} maxLength={100} onChange={event => setDraftMaker(value => ({ ...value, name: event.target.value }))} placeholder="Например: Иван Ильин" /></label><label>Адрес страницы<input value={draftMaker.slug} maxLength={60} onChange={event => setDraftMaker(value => ({ ...value, slug: event.target.value }))} placeholder="ivan-ilyin" /></label><label>Кто это<input value={draftMaker.roleLine} maxLength={120} onChange={event => setDraftMaker(value => ({ ...value, roleLine: event.target.value }))} placeholder="популярный стендап-комик" /><small>Имя добавится автоматически: «Иван Ильин — популярный стендап-комик».</small></label><label>Форма обращения<select value={draftMaker.gender} onChange={event => setDraftMaker(value => ({ ...value, gender: event.target.value as TastemakerGender }))}><option value="male">Мужчина — послушал</option><option value="female">Женщина — послушала</option><option value="neutral">Без указания — слушает</option></select></label><p>Описание появится на главной и в поиске. Форма обращения нужна для естественных фраз в ленте. Ссылка действует 7 дней и сгорает после регистрации.</p><div><button type="button" className="ghostButton" onClick={() => setInviteOpen(false)}>Отмена</button><button type="button" className="darkButton" disabled={!draftMaker.name.trim() || !draftMaker.slug.trim() || draftMaker.roleLine.trim().length < 2 || busy === "create_tastemaker:global"} onClick={() => void action("create_tastemaker", undefined, draftMaker)}>{busy === "create_tastemaker:global" ? "Создаём…" : "Создать и скопировать ссылку"}</button></div></section></div> : null}
+      {inviteOpen ? <div className="modalBackdrop" role="presentation" onMouseDown={event => { if (event.currentTarget === event.target) setInviteOpen(false); }}><section className="workspaceModal"><button type="button" onClick={() => setInviteOpen(false)} aria-label="Закрыть"><Icon name="x" /></button><span>новый Саундмейкер</span><h2>Пригласить Саундмейкера</h2><label>Имя<input value={draftMaker.name} maxLength={100} onChange={event => setDraftMaker(value => ({ ...value, name: event.target.value }))} placeholder="Например: Иван Ильин" /></label><label>Адрес страницы<input value={draftMaker.slug} maxLength={60} onChange={event => setDraftMaker(value => ({ ...value, slug: event.target.value }))} placeholder="ivan-ilyin" /></label><label>Кто это<input value={draftMaker.roleLine} maxLength={120} onChange={event => setDraftMaker(value => ({ ...value, roleLine: event.target.value }))} placeholder="популярный стендап-комик" /><small>Имя добавится автоматически: «Иван Ильин — популярный стендап-комик».</small></label><label>Форма обращения<select value={draftMaker.gender} onChange={event => setDraftMaker(value => ({ ...value, gender: event.target.value as TastemakerGender }))}><option value="male">Мужчина — послушал</option><option value="female">Женщина — послушала</option><option value="neutral">Без указания — слушает</option></select></label><p>Описание появится на главной и в поиске. Форма обращения нужна для естественных фраз в ленте. Ссылка действует 7 дней и сгорает после регистрации.</p><div><button type="button" className="ghostButton" onClick={() => setInviteOpen(false)}>Отмена</button><button type="button" className="darkButton" disabled={!draftMaker.name.trim() || !draftMaker.slug.trim() || draftMaker.roleLine.trim().length < 2 || busy === "create_tastemaker:global"} onClick={() => void action("create_tastemaker", undefined, draftMaker)}>{busy === "create_tastemaker:global" ? "Создаём…" : "Создать приглашение"}</button></div></section></div> : null}
       {pendingDelete ? <div className="modalBackdrop" role="presentation" onMouseDown={event => { if (event.currentTarget === event.target && !busy) setPendingDelete(null); }}><section className="workspaceModal confirmModal" role="alertdialog" aria-modal="true" aria-labelledby="delete-tastemaker-title"><button type="button" disabled={Boolean(busy)} onClick={() => setPendingDelete(null)} aria-label="Закрыть"><Icon name="x" /></button><span className="confirmModalIcon"><Icon name="shield" size={28} /></span><span>необратимое действие</span><h2 id="delete-tastemaker-title">Удалить {pendingDelete.name}?</h2><p>Профиль, история, подписки, комментарии и аналитика этого Саундмейкера будут удалены. Для подтверждения введите имя полностью.</p><label>Имя Саундмейкера<input autoFocus value={deleteConfirmation} onChange={event => setDeleteConfirmation(event.target.value)} placeholder={pendingDelete.name} /></label><div><button type="button" className="ghostButton" disabled={Boolean(busy)} onClick={() => setPendingDelete(null)}>Отмена</button><button type="button" className="dangerButton" disabled={deleteConfirmation.trim() !== pendingDelete.name || busy === `delete_tastemaker:${pendingDelete.id}`} onClick={() => void action("delete_tastemaker", pendingDelete.id, { confirmName: deleteConfirmation })}>{busy === `delete_tastemaker:${pendingDelete.id}` ? "Удаляем…" : "Удалить навсегда"}</button></div></section></div> : null}
       {serviceConnectOpen ? <div className="modalBackdrop"><section className="workspaceModal deviceModal"><button type="button" onClick={() => { setServiceConnectOpen(false); setServiceChallenge(null); }} aria-label="Закрыть"><Icon name="x" /></button><span>аккаунт-издатель · followtaste</span><h2>Подключить плейлисты</h2>{!serviceChallenge ? <><p>Аккаунт <b>followtaste</b> не является источником истории. Taste создаёт и обновляет в нём публичные плейлисты всех участников.</p><div className="consentChecklist"><span><Icon name="check" />История берётся из личного аккаунта Саундмейкера</span><span><Icon name="check" />followtaste только публикует плейлисты</span><span><Icon name="check" />Доступ хранится в зашифрованном виде</span></div><button className="darkButton wideButton" type="button" onClick={() => void startServiceConnection()}>{serviceState === "starting" ? "Получаем код…" : "Получить код для followtaste"}</button></> : <><p>На странице Яндекса выберите именно <b>followtaste</b>, введите код и подтвердите доступ.</p><div className="deviceCode"><small>код аккаунта followtaste</small><strong>{serviceChallenge.userCode}</strong><button type="button" onClick={() => void navigator.clipboard.writeText(serviceChallenge.userCode)}><Icon name="copy" />Копировать</button></div><a className="darkButton wideButton" href={serviceChallenge.verificationUrl} target="_blank" rel="noreferrer">Открыть Яндекс <Icon name="arrow" /></a><div className="waitingState"><i /><span>Ждём подтверждения. Админку можно оставить открытой.</span></div></>}</section></div> : null}
     </>
